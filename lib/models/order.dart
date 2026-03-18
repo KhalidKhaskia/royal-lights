@@ -1,16 +1,30 @@
 import 'order_item.dart';
 
-enum OrderStatus { active, inAssembly, handled, canceled }
+enum OrderStatus {
+  active,
+  preparing,
+  inAssembly,
+  awaitingShipping,
+  handled,
+  delivered,
+  canceled,
+}
 
 extension OrderStatusExtension on OrderStatus {
   String get dbValue {
     switch (this) {
       case OrderStatus.active:
         return 'Active';
+      case OrderStatus.preparing:
+        return 'Preparing';
       case OrderStatus.inAssembly:
         return 'In Assembly';
+      case OrderStatus.awaitingShipping:
+        return 'Awaiting Shipping';
       case OrderStatus.handled:
         return 'Handled';
+      case OrderStatus.delivered:
+        return 'Delivered';
       case OrderStatus.canceled:
         return 'Canceled';
     }
@@ -20,16 +34,33 @@ extension OrderStatusExtension on OrderStatus {
     switch (value) {
       case 'Active':
         return OrderStatus.active;
+      case 'Preparing':
+        return OrderStatus.preparing;
       case 'In Assembly':
         return OrderStatus.inAssembly;
+      case 'Awaiting Shipping':
+        return OrderStatus.awaitingShipping;
       case 'Handled':
         return OrderStatus.handled;
+      case 'Delivered':
+        return OrderStatus.delivered;
       case 'Canceled':
         return OrderStatus.canceled;
       default:
         return OrderStatus.active;
     }
   }
+
+  /// All statuses in display order (for filters and status change menu).
+  static List<OrderStatus> get all => [
+        OrderStatus.active,
+        OrderStatus.preparing,
+        OrderStatus.inAssembly,
+        OrderStatus.awaitingShipping,
+        OrderStatus.handled,
+        OrderStatus.delivered,
+        OrderStatus.canceled,
+      ];
 }
 
 class Order {

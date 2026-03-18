@@ -15,10 +15,10 @@ class SuppliersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n?.tr('suppliers') ?? 'Suppliers')),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _showSupplierDialog(context, ref, l10n),
-        icon: const Icon(Icons.add),
-        label: Text(l10n?.tr('newSupplier') ?? 'New Supplier'),
+        tooltip: l10n?.tr('newSupplier') ?? 'New Supplier',
+        child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: suppliersAsync.when(
         data: (suppliers) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/order.dart';
@@ -16,6 +17,7 @@ class OrdersScreen extends ConsumerStatefulWidget {
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   String _searchQuery = '';
   String _statusFilter = 'All';
+  String? _updatingOrderId;
 
   @override
   Widget build(BuildContext context) {
@@ -58,14 +60,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           const SizedBox(width: 16),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const OrderFormScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const OrderFormScreen()),
+          );
         },
-        icon: const Icon(Icons.add_shopping_cart_rounded),
-        label: Text(l10n?.tr('newOrder') ?? 'New Order'),
+        tooltip: l10n?.tr('newOrder') ?? 'New Order',
+        child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: ordersAsync.when(
         data: (orders) {
@@ -103,12 +105,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            scrollDirection: Axis.vertical,
-            child: SizedBox(
-              width: double.infinity,
-              child: DataTable(
+          return AnimatedFadeIn(
+            duration: AppAnimations.durationMedium,
+            scaleBegin: 0.98,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              scrollDirection: Axis.vertical,
+              child: SizedBox(
+                width: double.infinity,
+                child: DataTable(
                 headingRowHeight: 56,
                 dataRowMinHeight: 52,
                 dataRowMaxHeight: 60,
@@ -133,24 +138,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   DataColumn(label: Text(l10n?.tr('username') ?? 'User')),
                 ],
                 rows: filtered.map((order) {
-                  Color statusColor;
-                  switch (order.status) {
-                    case OrderStatus.active:
-                      statusColor = AppTheme.success;
-                      break;
-                    case OrderStatus.inAssembly:
-                      statusColor = AppTheme.warning;
-                      break;
-                    case OrderStatus.handled:
-                      statusColor = AppTheme.primaryGold;
-                      break;
-                    case OrderStatus.canceled:
-                      statusColor = AppTheme.error;
-                      break;
-                  }
+                  final statusColor = _statusColor(order.status);
+                  final isUpdating = _updatingOrderId == order.id;
 
                   return DataRow(
                     onSelectChanged: (_) {
+                      if (_updatingOrderId != null) return;
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => OrderFormScreen(orderId: order.id),
@@ -168,7 +161,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       DataCell(
                         Text(
                           '#${order.orderNumber ?? '-'}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: AppTheme.primaryGold,
                             fontWeight: FontWeight.w700,
                           ),
@@ -197,22 +190,65 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                         ),
                       ),
                       DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            order.status.dbValue,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
+                        PopupMenuButton<String>(
+                          enabled: !isUpdating,
+                          tooltip: l10n?.tr('changeStatus') ?? 'Change status',
+                          padding: EdgeInsets.zero,
+                          onSelected: (value) =>
+                              _updateOrderStatus(order.id, value),
+                          itemBuilder: (context) => OrderStatusExtension.all
+                              .map(
+                                (s) => PopupMenuItem<String>(
+                                  value: s.dbValue,
+                                  child: Row(
+                                    children: [
+                                      if (order.status == s)
+                                        const Icon(Icons.check_rounded,
+                                            size: 20, color: AppTheme.primaryGold),
+                                      if (order.status == s)
+                                        const SizedBox(width: 8),
+                                      Text(_statusLabel(s, l10n)),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
                             ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: isUpdating
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        order.status.dbValue,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.arrow_drop_down_rounded,
+                                        size: 18,
+                                        color: statusColor,
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),
@@ -233,6 +269,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 }).toList(),
               ),
             ),
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -247,21 +284,19 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   }
 
   List<Widget> _buildFilterChips(AppLocalizations? l10n) {
-    final filters = ['All', 'Active', 'In Assembly', 'Handled', 'Canceled'];
-    final labels = {
-      'All': l10n?.tr('all') ?? 'All',
-      'Active': l10n?.tr('active') ?? 'Active',
-      'In Assembly': l10n?.tr('inAssembly') ?? 'In Assembly',
-      'Handled': l10n?.tr('handled') ?? 'Handled',
-      'Canceled': l10n?.tr('canceled') ?? 'Canceled',
-    };
-
+    final filters = [
+      'All',
+      ...OrderStatusExtension.all.map((s) => s.dbValue),
+    ];
     return filters.map((f) {
       final isSelected = _statusFilter == f;
+      final label = f == 'All'
+          ? (l10n?.tr('all') ?? 'All')
+          : _statusLabel(OrderStatusExtension.fromString(f), l10n);
       return Padding(
         padding: const EdgeInsets.only(right: 6),
         child: FilterChip(
-          label: Text(labels[f]!, style: TextStyle(fontSize: 12)),
+          label: Text(label, style: const TextStyle(fontSize: 12)),
           selected: isSelected,
           onSelected: (selected) {
             setState(() => _statusFilter = f);
@@ -275,5 +310,77 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         ),
       );
     }).toList();
+  }
+
+  Color _statusColor(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.active:
+        return AppTheme.success;
+      case OrderStatus.preparing:
+        return const Color(0xFF2196F3);
+      case OrderStatus.inAssembly:
+        return AppTheme.warning;
+      case OrderStatus.awaitingShipping:
+        return const Color(0xFF9C27B0);
+      case OrderStatus.handled:
+        return AppTheme.primaryGold;
+      case OrderStatus.delivered:
+        return AppTheme.success;
+      case OrderStatus.canceled:
+        return AppTheme.error;
+    }
+  }
+
+  String _statusLabel(OrderStatus status, AppLocalizations? l10n) {
+    switch (status) {
+      case OrderStatus.active:
+        return l10n?.tr('active') ?? 'Active';
+      case OrderStatus.preparing:
+        return l10n?.tr('preparing') ?? 'Preparing';
+      case OrderStatus.inAssembly:
+        return l10n?.tr('inAssembly') ?? 'In Assembly';
+      case OrderStatus.awaitingShipping:
+        return l10n?.tr('awaitingShipping') ?? 'Awaiting Shipping';
+      case OrderStatus.handled:
+        return l10n?.tr('handled') ?? 'Handled';
+      case OrderStatus.delivered:
+        return l10n?.tr('delivered') ?? 'Delivered';
+      case OrderStatus.canceled:
+        return l10n?.tr('canceled') ?? 'Canceled';
+    }
+  }
+
+  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
+    setState(() => _updatingOrderId = orderId);
+    try {
+      final username = ref.read(currentUsernameProvider);
+      await ref
+          .read(orderServiceProvider)
+          .updateStatus(orderId, newStatus, username);
+      ref.invalidate(ordersProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                AppLocalizations.of(context)?.tr('statusUpdated') ?? 'Status updated'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '${AppLocalizations.of(context)?.tr('error') ?? 'Error'}: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updatingOrderId = null);
+    }
   }
 }

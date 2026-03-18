@@ -23,6 +23,18 @@ class OrderService {
     return (data as List).map((e) => Order.fromJson(e)).toList();
   }
 
+  /// Fetches all orders for a customer including order_items (for fixing screen).
+  Future<List<Order>> getByCustomerWithItems(String customerId) async {
+    final data = await _client
+        .from('orders')
+        .select(
+          '*, customers(card_name, customer_name), order_items(*, rooms(name), suppliers(company_name, phone))',
+        )
+        .eq('customer_id', customerId)
+        .order('created_at', ascending: false);
+    return (data as List).map((e) => Order.fromJson(e)).toList();
+  }
+
   Future<Order> getById(String id) async {
     final data = await _client
         .from('orders')

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/customer.dart';
 
@@ -42,6 +44,20 @@ class CustomerService {
         .select()
         .single();
     return Customer.fromJson(data);
+  }
+
+  /// Upload customer photo to Supabase Storage and return public URL.
+  /// Requires a storage bucket named "customer-photos" with public read access.
+  Future<String> uploadPhoto(String customerId, Uint8List imageBytes) async {
+    const bucket = 'customer-photos';
+    final path = '$customerId/photo.jpg';
+    await _client.storage.from(bucket).uploadBinary(
+          path,
+          imageBytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+    final url = _client.storage.from(bucket).getPublicUrl(path);
+    return url;
   }
 
   Future<void> delete(String id) async {

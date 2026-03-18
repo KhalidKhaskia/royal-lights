@@ -4,7 +4,15 @@
 -- ============================================================
 
 -- 1. ENUM TYPES
-CREATE TYPE order_status AS ENUM ('Active', 'In Assembly', 'Handled', 'Canceled');
+CREATE TYPE order_status AS ENUM (
+  'Active',
+  'Preparing',
+  'In Assembly',
+  'Awaiting Shipping',
+  'Handled',
+  'Delivered',
+  'Canceled'
+);
 CREATE TYPE payment_type AS ENUM ('Cash', 'Credit', 'Check');
 
 -- 2. PROFILES TABLE (extends auth.users)

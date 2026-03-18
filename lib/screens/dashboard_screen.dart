@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/app_animations.dart';
 import '../config/app_theme.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/providers.dart';
@@ -32,14 +33,20 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Stats row
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
+        child: AnimatedFadeIn(
+          duration: AppAnimations.durationMedium,
+          slideUp: true,
+          scaleBegin: 0.97,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Stats row
+              Row(
+                children: [
+                  Expanded(
+                    child: AnimatedFadeIn(
+                      delay: const Duration(milliseconds: 50),
+                      child: _StatCard(
                     icon: Icons.shopping_cart_rounded,
                     title: l10n?.tr('openOrders') ?? 'Open Orders',
                     value: openOrders.when(
@@ -54,9 +61,12 @@ class DashboardScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                  ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _StatCard(
+                  child: AnimatedFadeIn(
+                    delay: const Duration(milliseconds: 100),
+                    child: _StatCard(
                     icon: Icons.build_rounded,
                     title:
                         l10n?.tr('upcomingAssemblies') ?? 'Upcoming Assemblies',
@@ -72,9 +82,12 @@ class DashboardScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                  ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _StatCard(
+                  child: AnimatedFadeIn(
+                    delay: const Duration(milliseconds: 150),
+                    child: _StatCard(
                     icon: Icons.account_balance_wallet_rounded,
                     title: l10n?.tr('totalUnpaidDebts') ?? 'Total Unpaid Debts',
                     value: totalDebts.when(
@@ -89,46 +102,67 @@ class DashboardScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                  ),
               ],
             ),
             const SizedBox(height: 32),
             // Quick actions row
-            Text(
-              l10n?.tr('dashboard') ?? 'Quick Actions',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
+            AnimatedFadeIn(
+              delay: const Duration(milliseconds: 200),
+              child: Text(
+                l10n?.tr('dashboard') ?? 'Quick Actions',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
-                _QuickActionCard(
+                Expanded(
+                  child: AnimatedFadeIn(
+                    delay: const Duration(milliseconds: 250),
+                    child: _QuickActionCard(
                   icon: Icons.person_add_rounded,
                   label: l10n?.tr('newCustomer') ?? 'New Customer',
                   onTap: () =>
                       ref.read(selectedNavIndexProvider.notifier).setIndex(1),
                 ),
+                  ),
+                ),
                 const SizedBox(width: 12),
-                _QuickActionCard(
+                Expanded(
+                  child: AnimatedFadeIn(
+                    delay: const Duration(milliseconds: 300),
+                    child: _QuickActionCard(
                   icon: Icons.add_shopping_cart_rounded,
                   label: l10n?.tr('newOrder') ?? 'New Order',
                   onTap: () =>
                       ref.read(selectedNavIndexProvider.notifier).setIndex(2),
                 ),
+                  ),
+                ),
                 const SizedBox(width: 12),
-                _QuickActionCard(
+                Expanded(
+                  child: AnimatedFadeIn(
+                    delay: const Duration(milliseconds: 350),
+                    child: _QuickActionCard(
                   icon: Icons.payment_rounded,
                   label: l10n?.tr('newPayment') ?? 'New Payment',
                   onTap: () =>
                       ref.read(selectedNavIndexProvider.notifier).setIndex(3),
                 ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 32),
             // LLM Placeholder
-            Container(
+            AnimatedFadeIn(
+              delay: const Duration(milliseconds: 400),
+              child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
@@ -185,7 +219,9 @@ class DashboardScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            ),
           ],
+        ),
         ),
       ),
     );

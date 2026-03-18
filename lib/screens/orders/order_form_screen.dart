@@ -27,6 +27,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   bool _isLoading = false;
   bool _isEdit = false;
   Order? _existingOrder;
+  final _customerSelectorKey = GlobalKey();
+  OverlayEntry? _customerOverlayEntry;
+  final _customerSearchController = TextEditingController();
 
   @override
   void initState() {
@@ -81,6 +84,129 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
       total += price * qty;
     }
     return total;
+  }
+
+  void _hideCustomerDropdown() {
+    _customerOverlayEntry?.remove();
+    _customerOverlayEntry = null;
+    setState(() {});
+  }
+
+  void _showCustomerPicker(
+    BuildContext context,
+    List<Customer> customers,
+    AppLocalizations? l10n,
+  ) {
+    if (_customerOverlayEntry != null) {
+      _hideCustomerDropdown();
+      return;
+    }
+    _customerSearchController.clear();
+    final box = _customerSelectorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final pos = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final overlay = Overlay.of(context);
+    final searchHint = l10n?.tr('search') ?? 'Search';
+
+    _customerOverlayEntry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          // Tap-outside to close
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _hideCustomerDropdown,
+            ),
+          ),
+          Positioned(
+            left: pos.dx,
+            top: pos.dy + size.height + 4,
+            width: size.width,
+            height: 320,
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(12),
+              color: AppTheme.surfaceCard,
+              child: StatefulBuilder(
+                builder: (ctx, setOverlayState) {
+                  final query = _customerSearchController.text.trim().toLowerCase();
+                  final filtered = query.isEmpty
+                      ? customers
+                      : customers.where((c) {
+                          return c.cardName.toLowerCase().contains(query) ||
+                              c.customerName.toLowerCase().contains(query) ||
+                              c.phones.any((p) => p.contains(query));
+                        }).toList();
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                        child: TextField(
+                          controller: _customerSearchController,
+                          onChanged: (_) {
+                            setOverlayState(() {});
+                          },
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: searchHint,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              size: 20,
+                              color: AppTheme.textSecondary,
+                            ),
+                            filled: true,
+                            fillColor: AppTheme.surfaceDark.withValues(alpha: 0.5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final c = filtered[i];
+                            return InkWell(
+                              onTap: () {
+                                setState(() => _selectedCustomer = c);
+                                _hideCustomerDropdown();
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 12),
+                                child: Text(
+                                  '${c.cardName} - ${c.customerName}',
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_customerOverlayEntry!);
+    setState(() {});
   }
 
   @override
@@ -161,7 +287,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
               ),
               child: Row(
                 children: [
-                  // Customer selector
+                  // Customer selector (searchable dropdown)
                   Expanded(
                     flex: 3,
                     child: customersAsync.when(
@@ -173,24 +299,37 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                               .where((c) => c.id == _existingOrder!.customerId)
                               .firstOrNull;
                         }
-                        return DropdownButtonFormField<Customer>(
-                          value: _selectedCustomer,
-                          decoration: InputDecoration(
-                            labelText: l10n?.tr('customerName') ?? 'Customer',
-                            prefixIcon: const Icon(Icons.person_outline),
-                          ),
-                          items: customers
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    '${c.cardName} - ${c.customerName}',
-                                  ),
+                        return KeyedSubtree(
+                          key: _customerSelectorKey,
+                          child: InkWell(
+                            onTap: () => _showCustomerPicker(
+                                context, customers, l10n),
+                            borderRadius: BorderRadius.circular(12),
+                            child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText:
+                                  l10n?.tr('customerName') ?? 'Customer',
+                              prefixIcon:
+                                  const Icon(Icons.person_outline),
+                              suffixIcon: const Icon(
+                                  Icons.arrow_drop_down,
+                                  color: AppTheme.textSecondary,
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (c) =>
-                              setState(() => _selectedCustomer = c),
+                            ),
+                            child: Text(
+                              _selectedCustomer == null
+                                  ? ''
+                                  : '${_selectedCustomer!.cardName} - ${_selectedCustomer!.customerName}',
+                              style: TextStyle(
+                                color: _selectedCustomer == null
+                                    ? AppTheme.textSecondary
+                                        .withValues(alpha: 0.6)
+                                    : null,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
                         );
                       },
                       loading: () => const CircularProgressIndicator(),
@@ -198,10 +337,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                     ),
                   ),
                   const SizedBox(width: 20),
-                  // Assembly toggle
-                  Expanded(
-                    flex: 2,
+                  // Assembly toggle (fixed width so it never moves)
+                  SizedBox(
+                    width: 200,
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           l10n?.tr('assemblyRequired') ?? 'Assembly',
@@ -213,7 +353,6 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                           onChanged: (v) {
                             setState(() {
                               _assemblyRequired = v;
-                              // Cascade to all items
                               for (final item in _items) {
                                 item.assemblyRequired = v;
                               }
@@ -223,43 +362,50 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                       ],
                     ),
                   ),
-                  // Assembly date picker
-                  if (_assemblyRequired)
-                    Expanded(
-                      flex: 2,
-                      child: InkWell(
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _assemblyDate ?? DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(
-                              const Duration(days: 365),
+                  const SizedBox(width: 20),
+                  // Assembly date (always same space; visibility animated)
+                  Expanded(
+                    flex: 2,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _assemblyRequired ? 1 : 0,
+                      child: IgnorePointer(
+                        ignoring: !_assemblyRequired,
+                        child: InkWell(
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: _assemblyDate ?? DateTime.now(),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365),
+                              ),
+                            );
+                            if (date != null)
+                              setState(() => _assemblyDate = date);
+                          },
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText:
+                                  l10n?.tr('assemblyDate') ?? 'Assembly Date',
+                              prefixIcon: const Icon(
+                                Icons.calendar_today_outlined,
+                              ),
                             ),
-                          );
-                          if (date != null)
-                            setState(() => _assemblyDate = date);
-                        },
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText:
-                                l10n?.tr('assemblyDate') ?? 'Assembly Date',
-                            prefixIcon: const Icon(
-                              Icons.calendar_today_outlined,
-                            ),
-                          ),
-                          child: Text(
-                            _assemblyDate?.toString().split(' ').first ??
-                                'Select date',
-                            style: TextStyle(
-                              color: _assemblyDate != null
-                                  ? AppTheme.textPrimary
-                                  : AppTheme.textSecondary,
+                            child: Text(
+                              _assemblyDate?.toString().split(' ').first ??
+                                  'Select date',
+                              style: TextStyle(
+                                color: _assemblyDate != null
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textSecondary,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                   const SizedBox(width: 20),
                   // Notes
                   Expanded(
@@ -771,6 +917,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   @override
   void dispose() {
     _notesController.dispose();
+    _customerSearchController.dispose();
+    _hideCustomerDropdown();
     for (final item in _items) {
       item.dispose();
     }

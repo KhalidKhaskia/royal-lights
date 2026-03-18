@@ -79,11 +79,20 @@ class _AssemblyCard extends StatelessWidget {
       case OrderStatus.active:
         statusColor = AppTheme.success;
         break;
+      case OrderStatus.preparing:
+        statusColor = const Color(0xFF2196F3);
+        break;
       case OrderStatus.inAssembly:
         statusColor = AppTheme.warning;
         break;
+      case OrderStatus.awaitingShipping:
+        statusColor = const Color(0xFF9C27B0);
+        break;
       case OrderStatus.handled:
         statusColor = AppTheme.primaryGold;
+        break;
+      case OrderStatus.delivered:
+        statusColor = AppTheme.success;
         break;
       case OrderStatus.canceled:
         statusColor = AppTheme.error;

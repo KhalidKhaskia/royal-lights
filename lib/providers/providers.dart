@@ -122,6 +122,14 @@ final customerOrdersProvider = FutureProvider.family
       return service.getByCustomer(customerId);
     });
 
+// Customer orders with items (for fixing screen)
+final customerOrdersWithItemsProvider = FutureProvider.family
+    .autoDispose<List<Order>, String>((ref, customerId) async {
+      if (customerId.isEmpty) return [];
+      final service = ref.watch(orderServiceProvider);
+      return service.getByCustomerWithItems(customerId);
+    });
+
 // Customer payments
 final customerPaymentsProvider = FutureProvider.family
     .autoDispose<List<Payment>, String>((ref, customerId) async {

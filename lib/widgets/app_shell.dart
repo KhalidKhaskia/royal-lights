@@ -9,6 +9,7 @@ import '../screens/orders/orders_screen.dart';
 import '../screens/payments/payments_screen.dart';
 import '../screens/assemblies/assemblies_screen.dart';
 import '../screens/suppliers/suppliers_screen.dart';
+import '../screens/fixing/fixing_screen.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -23,15 +24,19 @@ class AppShell extends ConsumerWidget {
       const DashboardScreen(),
       const CustomersScreen(),
       const OrdersScreen(),
+      const FixingScreen(),
       const PaymentsScreen(),
       const AssembliesScreen(),
       const SuppliersScreen(),
     ];
+    // Keys so AnimatedSwitcher can animate between screens
+    final screenKeys = List.generate(screens.length, (i) => ValueKey<int>(i));
 
     final navItems = [
       _NavItem(Icons.dashboard_rounded, l10n?.tr('dashboard') ?? 'Dashboard'),
       _NavItem(Icons.people_rounded, l10n?.tr('customers') ?? 'Customers'),
       _NavItem(Icons.shopping_cart_rounded, l10n?.tr('orders') ?? 'Orders'),
+      _NavItem(Icons.build_circle_outlined, l10n?.tr('fixing') ?? 'Fixing'),
       _NavItem(Icons.payment_rounded, l10n?.tr('payments') ?? 'Payments'),
       _NavItem(Icons.build_rounded, l10n?.tr('assemblies') ?? 'Assemblies'),
       _NavItem(
@@ -216,11 +221,29 @@ class AppShell extends ConsumerWidget {
               ],
             ),
           ),
-          // Main content
+          // Main content with heavier cross-fade + subtle scale
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: screens[selectedIndex],
+              duration: const Duration(milliseconds: 420),
+              switchInCurve: Curves.easeOutQuart,
+              switchOutCurve: Curves.easeInQuart,
+              transitionBuilder: (child, animation) {
+                final scale = Tween<double>(begin: 0.98, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
+                );
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: scale,
+                    alignment: Alignment.center,
+                    child: child,
+                  ),
+                );
+              },
+              child: KeyedSubtree(
+                key: screenKeys[selectedIndex],
+                child: screens[selectedIndex],
+              ),
             ),
           ),
         ],

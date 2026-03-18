@@ -165,6 +165,52 @@ class AppTheme {
         color: Colors.white10,
         thickness: 0.5,
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _SmoothPageTransitionsBuilder(),
+          TargetPlatform.iOS: _SmoothPageTransitionsBuilder(),
+          TargetPlatform.macOS: _SmoothPageTransitionsBuilder(),
+          TargetPlatform.windows: _SmoothPageTransitionsBuilder(),
+        },
+      ),
+    );
+  }
+}
+
+/// Heavier fade + slide for route transitions.
+class _SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _SmoothPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    const curve = Curves.easeOutQuart;
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: curve,
+      reverseCurve: curve.flipped,
+    );
+    final opacity = Tween<double>(begin: 0, end: 1).animate(curved);
+    final offset = Tween<Offset>(
+      begin: const Offset(0.04, 0),
+      end: Offset.zero,
+    ).animate(curved);
+    final scale = Tween<double>(begin: 0.98, end: 1.0).animate(curved);
+    return FadeTransition(
+      opacity: opacity,
+      child: SlideTransition(
+        position: offset,
+        child: ScaleTransition(
+          scale: scale,
+          alignment: Alignment.center,
+          child: child,
+        ),
+      ),
     );
   }
 }

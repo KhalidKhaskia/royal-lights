@@ -48,10 +48,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           const SizedBox(width: 16),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _showPaymentDialog(context, ref, l10n),
-        icon: const Icon(Icons.add),
-        label: Text(l10n?.tr('newPayment') ?? 'New Payment'),
+        tooltip: l10n?.tr('newPayment') ?? 'New Payment',
+        child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: paymentsAsync.when(
         data: (payments) {

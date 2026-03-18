@@ -6,6 +6,7 @@ class Customer {
   final String? location;
   final String? notes;
   final double remainingDebt;
+  final String? imageUrl;
   final String? createdBy;
   final String? updatedBy;
   final DateTime? createdAt;
@@ -19,6 +20,7 @@ class Customer {
     this.location,
     this.notes,
     this.remainingDebt = 0,
+    this.imageUrl,
     this.createdBy,
     this.updatedBy,
     this.createdAt,
@@ -34,6 +36,7 @@ class Customer {
       location: json['location'] as String?,
       notes: json['notes'] as String?,
       remainingDebt: 0,
+      imageUrl: json['image_url'] as String?,
       createdBy: json['created_by'] as String?,
       updatedBy: json['updated_by'] as String?,
       createdAt: json['created_at'] != null
@@ -52,6 +55,7 @@ class Customer {
       'phones': phones,
       'location': location,
       'notes': notes,
+      'image_url': imageUrl,
       'created_by': createdBy,
       'updated_by': updatedBy,
     };
@@ -65,6 +69,7 @@ class Customer {
     String? location,
     String? notes,
     double? remainingDebt,
+    String? imageUrl,
     String? createdBy,
     String? updatedBy,
     DateTime? createdAt,
@@ -78,6 +83,7 @@ class Customer {
       location: location ?? this.location,
       notes: notes ?? this.notes,
       remainingDebt: remainingDebt ?? this.remainingDebt,
+      imageUrl: imageUrl ?? this.imageUrl,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
       createdAt: createdAt ?? this.createdAt,
