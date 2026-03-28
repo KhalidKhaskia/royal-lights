@@ -12,7 +12,8 @@ import '../../providers/providers.dart';
 
 class OrderFormScreen extends ConsumerStatefulWidget {
   final String? orderId;
-  const OrderFormScreen({super.key, this.orderId});
+  final Customer? initialCustomer;
+  const OrderFormScreen({super.key, this.orderId, this.initialCustomer});
 
   @override
   ConsumerState<OrderFormScreen> createState() => _OrderFormScreenState();
@@ -34,6 +35,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialCustomer != null) {
+      _selectedCustomer = widget.initialCustomer;
+    }
     if (widget.orderId != null) {
       _isEdit = true;
       _loadOrder();
@@ -125,9 +129,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             width: size.width,
             height: 320,
             child: Material(
-              elevation: 8,
+              elevation: 4,
+              shadowColor: Colors.black.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
-              color: AppTheme.surfaceCard,
+              color: AppTheme.surfaceContainerLowest,
               child: StatefulBuilder(
                 builder: (ctx, setOverlayState) {
                   final query = _customerSearchController.text.trim().toLowerCase();
@@ -149,21 +154,23 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                           onChanged: (_) {
                             setOverlayState(() {});
                           },
-                          style: const TextStyle(color: AppTheme.textPrimary),
+                          style: const TextStyle(color: AppTheme.onSurface),
                           decoration: InputDecoration(
                             hintText: searchHint,
+                            hintStyle: TextStyle(color: AppTheme.onSurfaceVariant.withValues(alpha: 0.6)),
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10),
                             prefixIcon: const Icon(
                               Icons.search,
                               size: 20,
-                              color: AppTheme.textSecondary,
+                              color: AppTheme.onSurfaceVariant,
                             ),
                             filled: true,
-                            fillColor: AppTheme.surfaceDark.withValues(alpha: 0.5),
+                            fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.5),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
                             ),
                           ),
                         ),
@@ -187,7 +194,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                                 child: Text(
                                   '${c.cardName} - ${c.customerName}',
                                   style: const TextStyle(
-                                    color: AppTheme.textPrimary,
+                                    color: AppTheme.onSurface,
                                     fontSize: 15,
                                   ),
                                 ),
@@ -236,24 +243,21 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.primaryGold.withValues(alpha: 0.15),
+              color: AppTheme.secondaryContainer,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppTheme.primaryGold.withValues(alpha: 0.3),
-              ),
             ),
             child: Row(
               children: [
                 Text(
                   '${l10n?.tr('totalPrice') ?? 'Total'}: ',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  style: const TextStyle(color: AppTheme.onSecondaryContainer, fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 Text(
-                  '₪${_totalPrice.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    color: AppTheme.primaryGold,
+                  '₪${_totalPrice.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    color: AppTheme.onSecondaryContainer,
                     fontWeight: FontWeight.w800,
-                    fontSize: 18,
+                    fontSize: 16,
                   ),
                 ),
               ],
@@ -281,9 +285,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
+                color: AppTheme.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -322,9 +326,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                                   : '${_selectedCustomer!.cardName} - ${_selectedCustomer!.customerName}',
                               style: TextStyle(
                                 color: _selectedCustomer == null
-                                    ? AppTheme.textSecondary
+                                    ? AppTheme.onSurfaceVariant
                                         .withValues(alpha: 0.6)
-                                    : null,
+                                    : AppTheme.onSurface,
                                 fontSize: 16,
                               ),
                             ),
@@ -345,7 +349,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                       children: [
                         Text(
                           l10n?.tr('assemblyRequired') ?? 'Assembly',
-                          style: const TextStyle(color: AppTheme.textSecondary),
+                          style: const TextStyle(color: AppTheme.onSurfaceVariant),
                         ),
                         const SizedBox(width: 8),
                         Switch(
@@ -397,8 +401,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                                   'Select date',
                               style: TextStyle(
                                 color: _assemblyDate != null
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.textSecondary,
+                                    ? AppTheme.onSurface
+                                    : AppTheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -430,7 +434,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryGold,
+                    color: AppTheme.onSurface,
                   ),
                 ),
                 const Spacer(),
@@ -445,12 +449,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            // Items table
             Container(
               decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
+                color: AppTheme.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -506,8 +509,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             DataCell(
               Text(
                 '${index + 1}',
-                style: TextStyle(
-                  color: AppTheme.primaryGold,
+                style: const TextStyle(
+                  color: AppTheme.secondary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -652,7 +655,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                 value: item.assemblyRequired,
                 onChanged: (v) =>
                     setState(() => item.assemblyRequired = v ?? false),
-                activeColor: AppTheme.primaryGold,
+                activeColor: AppTheme.secondary,
               ),
             ),
             // 9. Room dropdown
@@ -667,7 +670,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                     l10n?.tr('room') ?? 'Room',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: AppTheme.onSurfaceVariant,
                     ),
                   ),
                   items: rooms
@@ -697,7 +700,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                     l10n?.tr('supplier') ?? 'Supplier',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: AppTheme.onSurfaceVariant,
                     ),
                   ),
                   items: suppliers
@@ -816,6 +819,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
       );
@@ -861,7 +865,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
-                    Icon(Icons.store, color: AppTheme.primaryGold, size: 18),
+                    Icon(Icons.store, color: AppTheme.secondary, size: 18),
                     const SizedBox(width: 8),
                     Text(
                       name,
