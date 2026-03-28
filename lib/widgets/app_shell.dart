@@ -100,7 +100,7 @@ class AppShell extends ConsumerWidget {
                         child: Text(
                           'Royal Light',
                           style: TextStyle(
-                            color: AppTheme.primaryGold,
+                            color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
                             letterSpacing: 0.5,

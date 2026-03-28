@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/customer.dart';
@@ -41,7 +42,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                       c.phones.any((p) => p.contains(query));
                 }).toList();
           return AlertDialog(
-            backgroundColor: AppTheme.surfaceCard,
+            backgroundColor: AppTheme.surfaceContainerLowest,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -53,7 +54,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                   child: Text(
                     l10n?.tr('selectCustomerFixing') ?? 'Select customer',
                     style: const TextStyle(
-                      color: AppTheme.textPrimary,
+                      color: AppTheme.onSurface,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
@@ -71,15 +72,15 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                   TextField(
                     controller: searchController,
                     onChanged: (_) => setDialogState(() {}),
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: const TextStyle(color: AppTheme.onSurface),
                     decoration: InputDecoration(
                       hintText: l10n?.tr('search') ?? 'Search',
                       prefixIcon: const Icon(
                         Icons.search_rounded,
-                        color: AppTheme.textSecondary,
+                        color: AppTheme.onSurfaceVariant,
                       ),
                       filled: true,
-                      fillColor: AppTheme.surfaceDark.withValues(alpha: 0.5),
+                      fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.5),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -139,7 +140,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                         Text(
                                           c.cardName,
                                           style: const TextStyle(
-                                            color: AppTheme.textPrimary,
+                                            color: AppTheme.onSurface,
                                             fontWeight: FontWeight.w600,
                                             fontSize: 15,
                                           ),
@@ -148,7 +149,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                           Text(
                                             c.customerName,
                                             style: const TextStyle(
-                                              color: AppTheme.textSecondary,
+                                              color: AppTheme.onSurfaceVariant,
                                               fontSize: 13,
                                             ),
                                           ),
@@ -158,7 +159,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                   Icon(
                                     Icons.arrow_forward_ios_rounded,
                                     size: 14,
-                                    color: AppTheme.textSecondary
+                                    color: AppTheme.onSurfaceVariant
                                         .withValues(alpha: 0.7),
                                   ),
                                 ],
@@ -363,79 +364,108 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
     final totalSelected = _totalSelectedFromOrders + _totalExtraItemsWithName;
 
     return Scaffold(
+      backgroundColor: AppTheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n?.tr('fixing') ?? 'Fixing'),
-            Text(
-              l10n?.tr('fixingSubtitle') ?? 'Select customer and items',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-                color: AppTheme.textSecondary.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (_selectedCustomer != null && totalSelected > 0)
-            Container(
-              margin: const EdgeInsets.only(left: 8, right: 8, top: 12, bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryGold.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppTheme.primaryGold.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle_outline_rounded,
-                      size: 18, color: AppTheme.primaryGold),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${l10n?.tr('selectedItemsCount') ?? 'Selected'} $totalSelected ${l10n?.tr('itemsShort') ?? 'items'}',
-                    style: const TextStyle(
-                      color: AppTheme.primaryGold,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (_selectedCustomer != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 8, right: 16, top: 10, bottom: 10),
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _createFixingOrder,
-                icon: _isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black54,
-                        ),
-                      )
-                    : const Icon(Icons.add_task_rounded, size: 20),
-                label: Text(l10n?.tr('createFixingOrder') ?? 'Create fixing order'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                ),
-              ),
-            ),
-        ],
+        toolbarHeight: 0,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ─── Step 1: Customer selector ─────────────────────────────
+            // Editorial Header
+            Padding(
+              padding: const EdgeInsets.only(left: 32, right: 32, top: 48, bottom: 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n?.tr('fixing') ?? 'Warranty & Fixes',
+                        style: GoogleFonts.assistant(
+                          fontSize: 42,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: AppTheme.onSurface,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 4,
+                        width: 60,
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  if (_selectedCustomer != null && totalSelected > 0)
+                    Container(
+                      margin: const EdgeInsets.only(right: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.secondary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle_outline_rounded,
+                              size: 18, color: AppTheme.secondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${l10n?.tr('selectedItemsCount') ?? 'Selected'} $totalSelected ${l10n?.tr('itemsShort') ?? 'items'}',
+                            style: GoogleFonts.assistant(
+                              color: AppTheme.secondary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_selectedCustomer != null)
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _createFixingOrder,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.add_task_rounded, size: 20),
+                      label: Text(
+                        l10n?.tr('createFixingOrder') ?? 'Create fixing order',
+                        style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.secondary,
+                        foregroundColor: AppTheme.onSecondary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ─── Step 1: Customer selector ─────────────────────────────
             _SectionHeader(
               icon: Icons.person_rounded,
               title: l10n?.tr('customerName') ?? 'Customer',
@@ -490,9 +520,9 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                   }
                   return Container(
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceCard,
+                      color: AppTheme.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white10),
+                      border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.2),
@@ -522,7 +552,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             iconColor: AppTheme.primaryGold,
-                            collapsedIconColor: AppTheme.textSecondary,
+                            collapsedIconColor: AppTheme.onSurfaceVariant,
                             leading: Container(
                               width: 44,
                               height: 44,
@@ -548,7 +578,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                     '₪${order.totalPrice.toStringAsFixed(2)} • ${order.items.length} ${l10n?.tr('itemsShort') ?? 'items'}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
+                                      color: AppTheme.onSurface,
                                       fontSize: 15,
                                     ),
                                   ),
@@ -594,7 +624,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                           _deselectAllOrderItems(order),
                                       icon: Icon(Icons.deselect_rounded,
                                           size: 18,
-                                          color: AppTheme.textSecondary),
+                                          color: AppTheme.onSurfaceVariant),
                                       label: Text(
                                           l10n?.tr('deselectAll') ?? 'Deselect all'),
                                     ),
@@ -628,7 +658,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                     title: Text(
                                       '${item.name} × ${item.quantity}',
                                       style: const TextStyle(
-                                        color: AppTheme.textPrimary,
+                                        color: AppTheme.onSurface,
                                         fontWeight: FontWeight.w500,
                                         fontSize: 14,
                                       ),
@@ -641,7 +671,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                                             child: Text(
                                               item.notes!,
                                               style: const TextStyle(
-                                                color: AppTheme.textSecondary,
+                                                color: AppTheme.onSurfaceVariant,
                                                 fontSize: 12,
                                               ),
                                             ),
@@ -697,9 +727,9 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
               else
                 Container(
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceCard,
+                    color: AppTheme.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.2),
@@ -751,15 +781,18 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+                    ], // close children of extra items Container Column
+                  ), // close Column of extra items
+                ), // close Container of extra items
+            ], // close spread operator `...[` from line 501
+          ], // close inner Column children
+        ), // close inner Column
+      ), // close Padding
+    ], // close outer Column children
+  ), // close outer Column
+ ), // close SingleChildScrollView
+); // close Scaffold
+} // close match
 
   Widget _buildExtraItemRow(
     AppLocalizations? l10n,
@@ -774,7 +807,7 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceLight.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -984,7 +1017,7 @@ class _CustomerCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceCard,
+            color: AppTheme.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.primaryGold.withValues(alpha: 0.3)),
             boxShadow: [
@@ -1018,7 +1051,7 @@ class _CustomerCard extends StatelessWidget {
                     Text(
                       customer.cardName,
                       style: const TextStyle(
-                        color: AppTheme.textPrimary,
+                        color: AppTheme.onSurface,
                         fontWeight: FontWeight.w700,
                         fontSize: 17,
                       ),
@@ -1027,7 +1060,7 @@ class _CustomerCard extends StatelessWidget {
                       Text(
                         customer.customerName,
                         style: const TextStyle(
-                          color: AppTheme.textSecondary,
+                          color: AppTheme.onSurfaceVariant,
                           fontSize: 14,
                         ),
                       ),
@@ -1076,9 +1109,9 @@ class _EmptyCard extends StatelessWidget {
     final child = Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: AppTheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1086,14 +1119,14 @@ class _EmptyCard extends StatelessWidget {
           Icon(
             icon,
             size: 48,
-            color: AppTheme.textSecondary.withValues(alpha: 0.5),
+            color: AppTheme.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(
             message,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: AppTheme.textPrimary,
+              color: AppTheme.onSurface,
               fontSize: 15,
               fontWeight: FontWeight.w500,
             ),
@@ -1104,7 +1137,7 @@ class _EmptyCard extends StatelessWidget {
               subtitle!,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppTheme.textSecondary.withValues(alpha: 0.9),
+                color: AppTheme.onSurfaceVariant.withValues(alpha: 0.9),
                 fontSize: 13,
               ),
             ),
@@ -1142,9 +1175,9 @@ class _LoadingCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(40),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: AppTheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
       ),
       child: const Center(child: CircularProgressIndicator()),
     );

@@ -115,8 +115,9 @@
   "noOrdersForCustomer": "This customer has no orders yet.",
   "addItemsFromOrdersOrExtra": "Select items from the orders above or add additional items below.",
   "preparing": "Preparing",
-  "awaitingShipping": "Awaiting Shipping",
+  "awaitingShipping": "Sent for Installation",
   "delivered": "Delivered",
   "changeStatus": "Change status",
-  "statusUpdated": "Status updated"
+  "statusUpdated": "Status updated",
+  "createdBy": "Created By"
 }
