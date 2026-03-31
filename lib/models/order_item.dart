@@ -1,3 +1,10 @@
+int _warrantyYearsFromJson(dynamic value) {
+  final n = (value as num?)?.toInt();
+  if (n == 3) return 3;
+  if (n == 5) return 5;
+  return 0;
+}
+
 class OrderItem {
   final String? id;
   final String? orderId;
@@ -6,12 +13,18 @@ class OrderItem {
   final String? imageUrl; // 3. Image
   final int quantity; // 4. Quantity
   final String? extras; // 5. Extras
-  final String? notes; // 6. Notes
-  final double price; // 7. Price
+  final String? notes; // 6. Notes (optional; order form may omit)
+  final double price; // 7. Unit price
+  /// Add-ons price per unit (scales with quantity).
+  final double extrasPrice;
   final bool assemblyRequired; // 8. Assembly Required
   final String? roomId; // 9. Room
   final String? supplierId; // 10. Supplier
   final bool existingInStore; // 11. Existing In Store
+  /// 0 = none, 3 = three-year, 5 = five-year warranty.
+  final int warrantyYears;
+  /// When warranty starts counting (usually delivery date once it begins).
+  final DateTime? warrantyStartDate;
   final String? createdBy;
   final String? updatedBy;
   final DateTime? createdAt;
@@ -32,10 +45,13 @@ class OrderItem {
     this.extras,
     this.notes,
     this.price = 0,
+    this.extrasPrice = 0,
     this.assemblyRequired = false,
     this.roomId,
     this.supplierId,
-    this.existingInStore = true,
+    this.existingInStore = false,
+    this.warrantyYears = 0,
+    this.warrantyStartDate,
     this.createdBy,
     this.updatedBy,
     this.createdAt,
@@ -56,10 +72,15 @@ class OrderItem {
       extras: json['extras'] as String?,
       notes: json['notes'] as String?,
       price: (json['price'] as num?)?.toDouble() ?? 0,
+      extrasPrice: (json['extras_price'] as num?)?.toDouble() ?? 0,
       assemblyRequired: json['assembly_required'] as bool? ?? false,
       roomId: json['room_id'] as String?,
       supplierId: json['supplier_id'] as String?,
-      existingInStore: json['existing_in_store'] as bool? ?? true,
+      existingInStore: json['existing_in_store'] as bool? ?? false,
+      warrantyYears: _warrantyYearsFromJson(json['warranty_years']),
+      warrantyStartDate: json['warranty_start_date'] != null
+          ? DateTime.parse(json['warranty_start_date'] as String)
+          : null,
       createdBy: json['created_by'] as String?,
       updatedBy: json['updated_by'] as String?,
       createdAt: json['created_at'] != null
@@ -88,10 +109,13 @@ class OrderItem {
       'extras': extras,
       'notes': notes,
       'price': price,
+      'extras_price': extrasPrice,
       'assembly_required': assemblyRequired,
       'room_id': roomId,
       'supplier_id': supplierId,
       'existing_in_store': existingInStore,
+      'warranty_years': warrantyYears,
+      'warranty_start_date': warrantyStartDate?.toIso8601String().split('T').first,
       'created_by': createdBy,
       'updated_by': updatedBy,
     };
@@ -107,10 +131,13 @@ class OrderItem {
     String? extras,
     String? notes,
     double? price,
+    double? extrasPrice,
     bool? assemblyRequired,
     String? roomId,
     String? supplierId,
     bool? existingInStore,
+    int? warrantyYears,
+    DateTime? warrantyStartDate,
     String? createdBy,
     String? updatedBy,
   }) {
@@ -124,10 +151,13 @@ class OrderItem {
       extras: extras ?? this.extras,
       notes: notes ?? this.notes,
       price: price ?? this.price,
+      extrasPrice: extrasPrice ?? this.extrasPrice,
       assemblyRequired: assemblyRequired ?? this.assemblyRequired,
       roomId: roomId ?? this.roomId,
       supplierId: supplierId ?? this.supplierId,
       existingInStore: existingInStore ?? this.existingInStore,
+      warrantyYears: warrantyYears ?? this.warrantyYears,
+      warrantyStartDate: warrantyStartDate ?? this.warrantyStartDate,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
     );

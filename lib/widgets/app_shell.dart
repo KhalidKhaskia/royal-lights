@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/providers.dart';
 import '../config/app_theme.dart';
+import 'brand_logo.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/customers/customers_screen.dart';
 import '../screens/orders/orders_screen.dart';
@@ -64,59 +65,35 @@ class AppShell extends ConsumerWidget {
             child: Column(
               children: [
                 // Logo / Brand
-                Container(
-                  height: 80,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppTheme.primaryBlue, AppTheme.accentBlue],
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppTheme.primaryGold,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primaryGold.withValues(
-                                alpha: 0.4,
-                              ),
-                              blurRadius: 12,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.light,
-                          color: Colors.black,
-                          size: 24,
-                        ),
+                SizedBox(
+                  height: 90,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: const [
+                      Positioned.fill(
+                        child: ColoredBox(color: AppTheme.surfaceCard),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Royal Light',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            letterSpacing: 0.5,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: -10,
+                        child: Center(
+                          child: BrandLogo(
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
                 // Navigation items
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 4,
+                      vertical: 0,
                     ),
                     itemCount: navItems.length,
                     itemBuilder: (context, index) {
@@ -192,9 +169,9 @@ class AppShell extends ConsumerWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _LanguageChip('עב', 'he', locale, ref),
-                      _LanguageChip('عر', 'ar', locale, ref),
-                      _LanguageChip('EN', 'en', locale, ref),
+                      _languageChip('עב', 'he', locale, ref),
+                      _languageChip('عر', 'ar', locale, ref),
+                      _languageChip('EN', 'en', locale, ref),
                     ],
                   ),
                 ),
@@ -252,7 +229,7 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-Widget _LanguageChip(
+Widget _languageChip(
   String label,
   String code,
   Locale currentLocale,

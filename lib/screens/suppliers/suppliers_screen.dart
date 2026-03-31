@@ -1,16 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/supplier.dart';
 import '../../providers/providers.dart';
+import '../../widgets/editorial_screen_title.dart';
 
-class SuppliersScreen extends ConsumerWidget {
+class SuppliersScreen extends ConsumerStatefulWidget {
   const SuppliersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SuppliersScreen> createState() => _SuppliersScreenState();
+}
+
+class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String _suppliersSearchFieldLabel() {
+    final l10n = AppLocalizations.of(context);
+    final t = l10n?.tr('searchSuppliersHint');
+    if (t != null && t.isNotEmpty && t != 'searchSuppliersHint') return t;
+    return switch (Localizations.localeOf(context).languageCode) {
+      'ar' => 'ابحث بالشركة، جهة الاتصال، الهاتف…',
+      'en' => 'Search by company, contact, phone…',
+      _ => 'חיפוש לפי חברה, איש קשר, טלפון…',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final suppliersAsync = ref.watch(suppliersProvider);
 
@@ -22,59 +48,99 @@ class SuppliersScreen extends ConsumerWidget {
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         backgroundColor: AppTheme.secondary,
-        foregroundColor: AppTheme.onSecondary,
-        elevation: 4,
+        foregroundColor: AppTheme.onPrimary,
+        elevation: 2,
         onPressed: () => _showSupplierDialog(context, ref, l10n),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(
-          l10n?.tr('newSupplier') ?? 'New Supplier',
-          style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
-        ),
+        tooltip: l10n?.tr('newSupplier') ?? 'New Supplier',
+        child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Editorial Header
+          EditorialScreenTitle(
+            title: l10n?.tr('suppliers') ?? 'Suppliers',
+          ),
           Padding(
-            padding: const EdgeInsets.only(left: 32, right: 32, top: 48, bottom: 24),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n?.tr('suppliers') ?? 'Suppliers',
-                      style: GoogleFonts.assistant(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        color: AppTheme.onSurface,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 4,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: AppTheme.secondary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ],
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Material(
+              elevation: 2,
+              shadowColor: Colors.black.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(20),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (_) => setState(() {}),
+                style: GoogleFonts.assistant(
+                  color: AppTheme.onSurface,
                 ),
-                const Spacer(),
-              ],
+                decoration: InputDecoration(
+                  floatingLabelBehavior: FloatingLabelBehavior.auto,
+                  floatingLabelAlignment: FloatingLabelAlignment.start,
+                  labelText: _suppliersSearchFieldLabel(),
+                  labelStyle: GoogleFonts.assistant(
+                    color: AppTheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  floatingLabelStyle: GoogleFonts.assistant(
+                    color: AppTheme.secondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.secondary,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.surfaceContainerLowest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: const BorderSide(
+                      color: AppTheme.secondary,
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.fromLTRB(
+                    8,
+                    14,
+                    12,
+                    14,
+                  ),
+                ),
+              ),
             ),
           ),
-
+          const SizedBox(height: 24),
           Expanded(
             child: suppliersAsync.when(
               data: (suppliers) {
-                if (suppliers.isEmpty) {
+                final q = _searchCtrl.text.trim().toLowerCase();
+                final filtered = suppliers.where((s) {
+                  if (q.isEmpty) return true;
+                  final company = s.companyName.toLowerCase();
+                  final contact = (s.contactName ?? '').toLowerCase();
+                  final phone = (s.phone ?? '').toLowerCase();
+                  final notes = (s.notes ?? '').toLowerCase();
+                  return company.contains(q) ||
+                      contact.contains(q) ||
+                      phone.contains(q) ||
+                      notes.contains(q);
+                }).toList();
+
+                if (filtered.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -82,7 +148,8 @@ class SuppliersScreen extends ConsumerWidget {
                         Icon(
                           Icons.local_shipping_outlined,
                           size: 80,
-                          color: AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
+                          color:
+                              AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -98,57 +165,43 @@ class SuppliersScreen extends ConsumerWidget {
                 }
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: 2.2,
-                      crossAxisSpacing: 24,
-                      mainAxisSpacing: 24,
-                    ),
-                    itemCount: suppliers.length,
-                    itemBuilder: (context, index) {
-                      final supplier = suppliers[index];
-                      return _SupplierCard(
-                        supplier: supplier,
-                        l10n: l10n,
-                        onEdit: () => _showSupplierDialog(
-                          context,
-                          ref,
-                          l10n,
-                          supplier: supplier,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final cols = width > 900
+                          ? 4
+                          : width > 600
+                              ? 3
+                              : 2;
+
+                      return GridView.builder(
+                        padding: const EdgeInsets.only(bottom: 88),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: cols,
+                          childAspectRatio: 0.72,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
                         ),
-                        onDelete: () async {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: AppTheme.surfaceContainerLowest,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              title: Text(l10n?.tr('delete') ?? 'Delete', style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
-                              content: Text('Delete ${supplier.companyName}?', style: GoogleFonts.assistant(fontSize: 16)),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: Text(l10n?.tr('cancel') ?? 'Cancel', style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant)),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.error,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                  ),
-                                  child: Text(l10n?.tr('delete') ?? 'Delete', style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
-                                ),
-                              ],
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final supplier = filtered[index];
+                          return StaggeredFadeIn(
+                            index: index,
+                            stepMilliseconds: 55,
+                            child: _SupplierCard(
+                              supplier: supplier,
+                              index: index,
+                              l10n: l10n,
+                              onTap: () => _showSupplierDialog(
+                                context,
+                                ref,
+                                l10n,
+                                supplier: supplier,
+                              ),
                             ),
                           );
-                          if (confirmed == true) {
-                            await ref
-                                .read(supplierServiceProvider)
-                                .delete(supplier.id);
-                            ref.invalidate(suppliersProvider);
-                          }
                         },
                       );
                     },
@@ -214,10 +267,13 @@ class SuppliersScreen extends ConsumerWidget {
                   style: GoogleFonts.assistant(color: AppTheme.onSurface),
                   decoration: InputDecoration(
                     labelText: l10n?.tr('companyName') ?? 'Company Name',
-                    labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
-                    prefixIcon: const Icon(Icons.business, color: AppTheme.onSurfaceVariant),
+                    labelStyle:
+                        const TextStyle(color: AppTheme.onSurfaceVariant),
+                    prefixIcon: const Icon(Icons.business,
+                        color: AppTheme.onSurfaceVariant),
                     filled: true,
-                    fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor:
+                        AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -230,10 +286,13 @@ class SuppliersScreen extends ConsumerWidget {
                   style: GoogleFonts.assistant(color: AppTheme.onSurface),
                   decoration: InputDecoration(
                     labelText: l10n?.tr('contactName') ?? 'Contact Name',
-                    labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
-                    prefixIcon: const Icon(Icons.person_outline, color: AppTheme.onSurfaceVariant),
+                    labelStyle:
+                        const TextStyle(color: AppTheme.onSurfaceVariant),
+                    prefixIcon: const Icon(Icons.person_outline,
+                        color: AppTheme.onSurfaceVariant),
                     filled: true,
-                    fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor:
+                        AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -247,10 +306,13 @@ class SuppliersScreen extends ConsumerWidget {
                   style: GoogleFonts.assistant(color: AppTheme.onSurface),
                   decoration: InputDecoration(
                     labelText: l10n?.tr('phone') ?? 'Phone',
-                    labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
-                    prefixIcon: const Icon(Icons.phone, color: AppTheme.onSurfaceVariant),
+                    labelStyle:
+                        const TextStyle(color: AppTheme.onSurfaceVariant),
+                    prefixIcon: const Icon(Icons.phone,
+                        color: AppTheme.onSurfaceVariant),
                     filled: true,
-                    fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor:
+                        AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -264,9 +326,11 @@ class SuppliersScreen extends ConsumerWidget {
                   style: GoogleFonts.assistant(color: AppTheme.onSurface),
                   decoration: InputDecoration(
                     labelText: l10n?.tr('notes') ?? 'Notes',
-                    labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
+                    labelStyle:
+                        const TextStyle(color: AppTheme.onSurfaceVariant),
                     filled: true,
-                    fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor:
+                        AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -277,13 +341,89 @@ class SuppliersScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (supplier != null)
+                      TextButton(
+                        onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: AppTheme.surfaceContainerLowest,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              title: Text(
+                                l10n?.tr('delete') ?? 'Delete',
+                                style: GoogleFonts.assistant(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              content: Text(
+                                'Delete ${supplier.companyName}?',
+                                style: GoogleFonts.assistant(
+                                  fontSize: 16,
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: Text(
+                                    l10n?.tr('cancel') ?? 'Cancel',
+                                    style: GoogleFonts.assistant(
+                                      color: AppTheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.error,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    l10n?.tr('delete') ?? 'Delete',
+                                    style: GoogleFonts.assistant(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed == true) {
+                            await ref
+                                .read(supplierServiceProvider)
+                                .delete(supplier.id);
+                            ref.invalidate(suppliersProvider);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                        child: Text(
+                          l10n?.tr('delete') ?? 'Delete',
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (supplier != null) const SizedBox(width: 8),
                     TextButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: TextButton.styleFrom(
                         foregroundColor: AppTheme.onSurfaceVariant,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
                       ),
-                      child: Text(l10n?.tr('cancel') ?? 'Cancel', style: GoogleFonts.assistant(fontWeight: FontWeight.w600)),
+                      child: Text(l10n?.tr('cancel') ?? 'Cancel',
+                          style: GoogleFonts.assistant(
+                              fontWeight: FontWeight.w600)),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
@@ -291,7 +431,9 @@ class SuppliersScreen extends ConsumerWidget {
                         final username = ref.read(currentUsernameProvider);
                         if (supplier != null) {
                           // Update
-                          await ref.read(supplierServiceProvider).update(supplier.id, {
+                          await ref
+                              .read(supplierServiceProvider)
+                              .update(supplier.id, {
                             'company_name': companyCtrl.text.trim(),
                             'contact_name': contactCtrl.text.trim(),
                             'phone': phoneCtrl.text.trim(),
@@ -309,7 +451,9 @@ class SuppliersScreen extends ConsumerWidget {
                             createdBy: username,
                             updatedBy: username,
                           );
-                          await ref.read(supplierServiceProvider).create(newSupplier);
+                          await ref
+                              .read(supplierServiceProvider)
+                              .create(newSupplier);
                         }
                         ref.invalidate(suppliersProvider);
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -318,10 +462,14 @@ class SuppliersScreen extends ConsumerWidget {
                         backgroundColor: AppTheme.secondary,
                         foregroundColor: AppTheme.onSecondary,
                         elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(l10n?.tr('save') ?? 'Save', style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
+                      child: Text(l10n?.tr('save') ?? 'Save',
+                          style: GoogleFonts.assistant(
+                              fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
@@ -336,124 +484,276 @@ class SuppliersScreen extends ConsumerWidget {
 
 class _SupplierCard extends StatelessWidget {
   final Supplier supplier;
+  final int index;
   final AppLocalizations? l10n;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback onTap;
 
   const _SupplierCard({
     required this.supplier,
+    required this.index,
     required this.l10n,
-    required this.onEdit,
-    required this.onDelete,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Matches the card vibe used in `CustomersScreen` (top banner + rounded card).
+    final topColor =
+        (index % 2 == 0) ? const Color(0xFF263248) : const Color(0xFFE2870F);
+
+    final companyName = supplier.companyName.trim();
+    final contactOrCompany = (supplier.contactName != null &&
+            supplier.contactName!.trim().isNotEmpty)
+        ? supplier.contactName!.trim()
+        : companyName;
+
+    final phone = (supplier.phone != null && supplier.phone!.trim().isNotEmpty)
+        ? supplier.phone!.trim()
+        : '-';
+
     return Container(
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
-        boxShadow: [
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.outlineVariant.withValues(alpha: 0.12),
+        ),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Color.fromRGBO(26, 28, 28, 0.05),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: AppTheme.secondaryContainer,
-                ),
-                child: const Icon(
-                  Icons.local_shipping_rounded,
-                  color: AppTheme.secondary,
-                  size: 24,
+              SizedBox(
+                height: 108,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.topCenter,
+                  children: [
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          height: 98,
+                          width: double.infinity,
+                          decoration: BoxDecoration(color: topColor),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 36,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.surfaceContainerLowest,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Container(
+                          width: 54,
+                          height: 54,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.surfaceContainerHighest,
+                          ),
+                          child: Center(
+                            child: Text(
+                              companyName.isNotEmpty
+                                  ? companyName[0].toUpperCase()
+                                  : '?',
+                              style: GoogleFonts.assistant(
+                                color: AppTheme.secondary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  supplier.companyName,
-                  style: GoogleFonts.assistant(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    color: AppTheme.onSurface,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+                      child: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppTheme.secondary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                l10n?.tr('supplier') ?? 'ספק',
+                                style: GoogleFonts.assistant(
+                                  color: AppTheme.secondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                companyName,
+                                textAlign: TextAlign.right,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.assistant(
+                                  color: AppTheme.onSurfaceVariant,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Column(
+                        children: [
+                          Text(
+                            contactOrCompany,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.assistant(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.onSurface,
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            phone,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.assistant(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppTheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              // Simple always-on indicator to keep layout consistent.
+                              // If you later add supplier status, we can map the color.
+                              color: AppTheme.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                (phone == '-')
+                                    ? (l10n?.tr('supplier') ?? 'ספק')
+                                    : (l10n?.tr('supplier') ?? 'ספק'),
+                                style: GoogleFonts.assistant(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(
+                height: 1,
+                indent: 14,
+                endIndent: 14,
+                color: AppTheme.outlineVariant.withValues(alpha: 0.15),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Icon(
+                            Icons.phone_outlined,
+                            size: 16,
+                            color: AppTheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            phone,
+                            style: GoogleFonts.assistant(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: Text(
+                          l10n?.tr('phone') ?? 'Phone',
+                          textAlign: TextAlign.right,
+                          style: GoogleFonts.assistant(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                color: AppTheme.onSurfaceVariant,
-                onPressed: onEdit,
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.error.withValues(alpha: 0.1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.delete_outline, size: 20),
-                color: AppTheme.error,
-                onPressed: onDelete,
               ),
             ],
           ),
-          const Spacer(),
-          if (supplier.contactName != null && supplier.contactName!.isNotEmpty)
-            Row(
-              children: [
-                Icon(
-                  Icons.person_outline,
-                  size: 16,
-                  color: AppTheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  supplier.contactName!,
-                  style: GoogleFonts.assistant(
-                    color: AppTheme.onSurfaceVariant,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(height: 8),
-          if (supplier.phone != null && supplier.phone!.isNotEmpty)
-            Row(
-              children: [
-                Icon(
-                  Icons.phone_outlined,
-                  size: 16,
-                  color: AppTheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  supplier.phone!,
-                  style: GoogleFonts.assistant(
-                    color: AppTheme.onSurfaceVariant,
-                    fontSize: 15,
-                  ),
-                ),
-              ],
-            ),
-        ],
+        ),
       ),
     );
   }

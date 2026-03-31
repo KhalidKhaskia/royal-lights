@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../config/app_animations.dart';
 import '../config/app_theme.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/providers.dart';
+import '../widgets/editorial_screen_title.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -17,31 +20,43 @@ class DashboardScreen extends ConsumerWidget {
     final username = ref.watch(currentUsernameProvider);
 
     return Scaffold(
+      backgroundColor: AppTheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: Text(l10n?.tr('dashboard') ?? 'Dashboard'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text(
-                '${l10n?.tr('welcome') ?? 'Welcome'}, $username',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-              ),
-            ),
-          ),
-        ],
+        toolbarHeight: 0,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: AppTheme.surfaceContainerLowest,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: AnimatedFadeIn(
-          duration: AppAnimations.durationMedium,
-          slideUp: true,
-          scaleBegin: 0.97,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Stats row
-              Row(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            EditorialScreenTitle(
+              title: l10n?.tr('dashboard') ?? 'Dashboard',
+              trailing: Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '${l10n?.tr('welcome') ?? 'Welcome'}, $username',
+                  style: GoogleFonts.assistant(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: AnimatedFadeIn(
+                duration: AppAnimations.durationMedium,
+                slideUp: true,
+                scaleBegin: 0.97,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Stats row
+                    Row(
                 children: [
                   Expanded(
                     child: AnimatedFadeIn(
@@ -110,11 +125,11 @@ class DashboardScreen extends ConsumerWidget {
             AnimatedFadeIn(
               delay: const Duration(milliseconds: 200),
               child: Text(
-                l10n?.tr('dashboard') ?? 'Quick Actions',
-                style: const TextStyle(
+                l10n?.tr('quickActions') ?? 'Quick actions',
+                style: GoogleFonts.assistant(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.onSurface,
                 ),
               ),
             ),
@@ -220,8 +235,11 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
             ),
+                  ],
+                ),
+              ),
+            ),
           ],
-        ),
         ),
       ),
     );

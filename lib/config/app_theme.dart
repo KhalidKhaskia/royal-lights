@@ -117,6 +117,9 @@ class AppTheme {
           TargetPlatform.windows: _SmoothPageTransitionsBuilder(),
         },
       ),
+      menuTheme: _buildMenuTheme(),
+      menuButtonTheme: _buildMenuButtonTheme(),
+      popupMenuTheme: _buildPopupMenuTheme(),
     );
   }
 
@@ -182,6 +185,8 @@ class AppTheme {
     return InputDecorationTheme(
       filled: true,
       fillColor: surfaceContainerHighest, // default state for inputs
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      floatingLabelAlignment: FloatingLabelAlignment.start,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: outlineVariant, width: 1), // Ghost Border
@@ -195,10 +200,15 @@ class AppTheme {
         borderSide: const BorderSide(color: secondary, width: 2), // Beam of light
       ),
       labelStyle: GoogleFonts.assistant(
-        fontSize: 10, 
-        fontWeight: FontWeight.bold, 
-        letterSpacing: 1.0, 
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.0,
         color: onSurfaceVariant,
+      ),
+      floatingLabelStyle: GoogleFonts.assistant(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: secondary,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
     );
@@ -262,6 +272,55 @@ class AppTheme {
       contentTextStyle: GoogleFonts.assistant(color: onPrimary),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       behavior: SnackBarBehavior.floating,
+    );
+  }
+
+  /// Matches [appDropdownMenuStyle] so MenuAnchor / DropdownMenu defaults stay rounded.
+  static MenuThemeData _buildMenuTheme() {
+    return MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStateProperty.all(surfaceContainerLowest),
+        surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+        elevation: WidgetStateProperty.all(10),
+        shadowColor: WidgetStateProperty.all(
+          Colors.black.withValues(alpha: 0.08),
+        ),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(
+              color: outlineVariant.withValues(alpha: 0.2),
+            ),
+          ),
+        ),
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        ),
+      ),
+    );
+  }
+
+  /// Rounds [MenuItemButton] highlights inside dropdown lists (M3 defaults are square).
+  static MenuButtonThemeData _buildMenuButtonTheme() {
+    return MenuButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  static PopupMenuThemeData _buildPopupMenuTheme() {
+    return PopupMenuThemeData(
+      color: surfaceContainerLowest,
+      elevation: 10,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: outlineVariant.withValues(alpha: 0.2)),
+      ),
     );
   }
 }

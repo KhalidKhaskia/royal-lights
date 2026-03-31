@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_theme.dart';
@@ -11,9 +12,28 @@ import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../../models/payment.dart';
 import '../../providers/providers.dart';
+import '../../theme/order_status_colors.dart';
 import '../orders/order_form_screen.dart';
 import '../payments/payments_screen.dart';
 import 'customers_screen.dart';
+
+String _trOrLocale(
+  BuildContext context,
+  AppLocalizations? l10n,
+  String key, {
+  required String en,
+  required String he,
+  required String ar,
+}) {
+  final t = l10n?.tr(key) ?? '';
+  // If ARB bundle is stale/missing, `tr()` returns the key itself.
+  if (t.isNotEmpty && t != key) return t;
+  return switch (Localizations.localeOf(context).languageCode) {
+    'he' => he,
+    'ar' => ar,
+    _ => en,
+  };
+}
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
   final Customer customer;
@@ -52,8 +72,15 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       phone = '972$phone';
     }
 
-    final message =
-        'שלום ${_customer.cardName},\n\nמצורף דוח מצב חשבון עדכני.\nיתרת חוב: ₪${_customer.remainingDebt.toStringAsFixed(2)}';
+    final code = Localizations.localeOf(context).languageCode;
+    final message = switch (code) {
+      'he' =>
+        'שלום ${_customer.cardName},\n\nמצורף דוח מצב חשבון עדכני.\nיתרת חוב: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
+      'ar' =>
+        'مرحبًا ${_customer.cardName},\n\nمرفق تقرير حالة الحساب المحدث.\nالرصيد المتبقي: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
+      _ =>
+        'Hello ${_customer.cardName},\n\nAttached is an up-to-date account summary.\nRemaining balance: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
+    };
 
     // Instead of whatsapp://, use https://wa.me/ which reliably redirects on mobile and web
     final url =
@@ -86,30 +113,64 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
+  void _openEditDialog(AppLocalizations? l10n) {
+    showDialog<Customer>(
+      context: context,
+      builder: (ctx) => CustomerFormDialog(
+        ref: ref,
+        l10n: l10n,
+        existingCustomer: _customer,
+        onCustomerSaved: (updated) {
+          setState(() => _customer = updated);
+        },
+      ),
+    );
+  }
+
+  void _goToOrdersFiltered() {
+    ref.read(ordersCustomerFilterProvider.notifier).setFilter(_customer);
+    ref.read(selectedNavIndexProvider.notifier).setIndex(2);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final latestCustomers = ref.watch(customersProvider).value;
+    if (latestCustomers != null) {
+      final latest = latestCustomers.where((c) => c.id == _customer.id).firstOrNull;
+      if (latest != null) _customer = latest;
+    }
     final ordersAsync = ref.watch(customerOrdersProvider(_customer.id));
     final paymentsAsync = ref.watch(customerPaymentsProvider(_customer.id));
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceContainerLowest,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppTheme.surfaceContainerLowest,
+        surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
+        title: Text(
+          _customer.cardName,
+          style: GoogleFonts.assistant(
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+            color: AppTheme.onSurface,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         iconTheme: const IconThemeData(color: AppTheme.onSurface),
         actions: [
           IconButton(
+            tooltip: l10n?.tr('editCustomerDetails') ?? 'Edit',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () {
-              // TODO: Open edit dialog
-            },
+            onPressed: () => _openEditDialog(l10n),
           ),
           const SizedBox(width: 8),
         ],
       ),
-      extendBodyBehindAppBar: true,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(customersProvider);
@@ -126,16 +187,40 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 _ContactInfoCard(customer: _customer, l10n: l10n),
                 const SizedBox(height: 24),
                 if (_customer.notes != null && _customer.notes!.isNotEmpty)
-                  _NotesCard(notes: _customer.notes!, l10n: l10n),
+                  _EditableNotesCard(
+                    customerId: _customer.id,
+                    initialNotes: _customer.notes ?? '',
+                    l10n: l10n,
+                    onSaved: (next) {
+                      setState(() => _customer = _customer.copyWith(notes: next));
+                    },
+                  ),
+                if (_customer.notes == null || _customer.notes!.isEmpty)
+                  _EditableNotesCard(
+                    customerId: _customer.id,
+                    initialNotes: '',
+                    l10n: l10n,
+                    onSaved: (next) {
+                      setState(() => _customer = _customer.copyWith(notes: next));
+                    },
+                  ),
               ],
             );
 
             final leftColumn = Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _OrdersListSection(ordersAsync: ordersAsync, l10n: l10n),
+                _OrdersListSection(
+                  ordersAsync: ordersAsync,
+                  l10n: l10n,
+                  onViewAll: _goToOrdersFiltered,
+                ),
                 const SizedBox(height: 32),
-                _PaymentsListSection(paymentsAsync: paymentsAsync, l10n: l10n),
+                _PaymentsListSection(
+                  customer: _customer,
+                  paymentsAsync: paymentsAsync,
+                  l10n: l10n,
+                ),
               ],
             );
 
@@ -155,45 +240,32 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         ),
                       );
                     },
-                    onEditDetails: () {
-                      showDialog<Customer>(
-                        context: context,
-                        builder: (ctx) => CustomerFormDialog(
-                          ref: ref,
-                          l10n: l10n,
-                          existingCustomer: _customer,
-                          onCustomerSaved: (updated) {
-                            setState(() {
-                              _customer = updated;
-                            });
-                          },
-                        ),
-                      );
-                    },
+                    onEditDetails: () => _openEditDialog(l10n),
                     onSendReport: () => _sendWhatsAppReport(context, l10n),
                   ),
                 ),
                 SliverPadding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    8,
+                    24,
+                    isWide ? 32 : 24,
+                  ),
                   sliver: SliverToBoxAdapter(
                     child: isWide
-                        ? Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Expanded(flex: 4, child: rightColumn),
-                                const SizedBox(width: 32),
-                                Expanded(flex: 6, child: leftColumn),
-                              ],
-                            ),
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Expanded(flex: 5, child: rightColumn),
+                              const SizedBox(width: 28),
+                              Expanded(flex: 6, child: leftColumn),
+                            ],
                           )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: <Widget>[
                               rightColumn,
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 28),
                               leftColumn,
                             ],
                           ),
@@ -235,98 +307,150 @@ class _HeroBanner extends ConsumerStatefulWidget {
 class _HeroBannerState extends ConsumerState<_HeroBanner> {
   bool _isUpdatingPhoto = false;
 
+  Future<void> _deletePhotoIfExists() async {
+    setState(() => _isUpdatingPhoto = true);
+    try {
+      await ref.read(customerServiceProvider).deletePhoto(widget.customer.id);
+      ref.invalidate(customersProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingPhoto = false);
+    }
+  }
+
+  Future<void> _pickAndUpload(ImageSource source) async {
+    final picker = ImagePicker();
+    final xFile = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (xFile == null || !mounted) return;
+    final bytes = await xFile.readAsBytes();
+
+    setState(() => _isUpdatingPhoto = true);
+    try {
+      final url = await ref
+          .read(customerServiceProvider)
+          .uploadPhoto(widget.customer.id, bytes);
+      await ref
+          .read(customerServiceProvider)
+          .update(widget.customer.id, {'image_url': url});
+      ref.invalidate(customersProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingPhoto = false);
+    }
+  }
+
   Future<void> _showPhotoPicker() async {
     final l10n = widget.l10n;
-    final hasExisting = widget.customer.imageUrl != null && widget.customer.imageUrl!.isNotEmpty;
+    final hasExisting = widget.customer.imageUrl != null &&
+        widget.customer.imageUrl!.isNotEmpty;
 
-    final source = await showDialog<ImageSource>(
+    if (_isUpdatingPhoto) return;
+
+    final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(l10n?.tr('selectImageSource') ?? 'Select Image Source', style: GoogleFonts.assistant(fontWeight: FontWeight.bold)),
-        surfaceTintColor: Colors.transparent,
-        backgroundColor: AppTheme.surfaceContainerLowest,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, ImageSource.camera),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.camera_alt_outlined, color: AppTheme.primary),
-                  const SizedBox(width: 12),
-                  Text(l10n?.tr('camera') ?? 'Camera', style: GoogleFonts.assistant(fontSize: 16)),
-                ],
-              ),
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, ImageSource.gallery),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.photo_library_outlined, color: AppTheme.primary),
-                  const SizedBox(width: 12),
-                  Text(l10n?.tr('gallery') ?? 'Gallery', style: GoogleFonts.assistant(fontSize: 16)),
-                ],
-              ),
-            ),
-          ),
-          if (hasExisting)
-            SimpleDialogOption(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                setState(() => _isUpdatingPhoto = true);
-                try {
-                  await ref.read(customerServiceProvider).deletePhoto(widget.customer.id);
-                  ref.invalidate(customersProvider);
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                } finally {
-                  if (mounted) setState(() => _isUpdatingPhoto = false);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_outline, color: AppTheme.error),
-                    const SizedBox(width: 12),
-                    Text(l10n?.tr('deletePhoto') ?? 'Delete Photo', style: GoogleFonts.assistant(fontSize: 16, color: AppTheme.error)),
-                  ],
-                ),
-              ),
-            ),
-        ],
+      showDragHandle: true,
+      backgroundColor: AppTheme.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
+      builder: (ctx) {
+        Widget tile({
+          required IconData icon,
+          required String title,
+          required String value,
+          Color? color,
+        }) {
+          return ListTile(
+            leading: Icon(icon, color: color ?? AppTheme.secondary),
+            title: Text(
+              title,
+              style: GoogleFonts.assistant(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: color ?? AppTheme.onSurface,
+              ),
+            ),
+            onTap: () => Navigator.pop(ctx, value),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18),
+          );
+        }
+
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsetsDirectional.only(start: 18, end: 18, top: 6),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      l10n?.tr('selectImageSource') ?? 'Select Image Source',
+                      style: GoogleFonts.assistant(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                tile(
+                  icon: Icons.camera_alt_outlined,
+                  title: l10n?.tr('camera') ?? 'Camera',
+                  value: 'camera',
+                ),
+                tile(
+                  icon: Icons.photo_library_outlined,
+                  title: l10n?.tr('gallery') ?? 'Gallery',
+                  value: 'gallery',
+                ),
+                if (hasExisting) ...[
+                  const Divider(height: 10),
+                  tile(
+                    icon: Icons.delete_outline,
+                    title: l10n?.tr('deletePhoto') ?? 'Delete Photo',
+                    value: 'delete',
+                    color: AppTheme.error,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
 
-    if (source != null) {
-      final picker = ImagePicker();
-      final xFile = await picker.pickImage(
-        source: source,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
-      );
-      if (xFile == null || !mounted) return;
-      final bytes = await xFile.readAsBytes();
-      
-      setState(() => _isUpdatingPhoto = true);
-      try {
-        final url = await ref.read(customerServiceProvider).uploadPhoto(widget.customer.id, bytes);
-        await ref.read(customerServiceProvider).update(widget.customer.id, {'image_url': url});
-        ref.invalidate(customersProvider);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-        }
-      } finally {
-        if (mounted) setState(() => _isUpdatingPhoto = false);
-      }
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case 'camera':
+        await _pickAndUpload(ImageSource.camera);
+        break;
+      case 'gallery':
+        await _pickAndUpload(ImageSource.gallery);
+        break;
+      case 'delete':
+        await _deletePhotoIfExists();
+        break;
     }
   }
 
@@ -338,8 +462,8 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     final onEditDetails = widget.onEditDetails;
     final onSendReport = widget.onSendReport;
     final onNewOrder = widget.onNewOrder;
-    // Determine VIP status (e.g. 5+ completed orders)
-    bool isVip = false;
+
+    var isVip = false;
     if (ordersAsync.hasValue) {
       final completed = ordersAsync.value!
           .where((o) => o.status == OrderStatus.delivered)
@@ -348,294 +472,500 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     }
 
     final hasDebt = customer.remainingDebt > 0;
+    final hasPhoto =
+        customer.imageUrl != null && customer.imageUrl!.isNotEmpty;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        // Background banner
-        Container(
-          height: 240,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            image: customer.imageUrl != null && customer.imageUrl!.isNotEmpty
-                ? DecorationImage(
-                    image: CachedNetworkImageProvider(customer.imageUrl!),
-                    fit: BoxFit.cover,
-                    colorFilter: ColorFilter.mode(
-                      Colors.black.withValues(alpha: 0.6),
-                      BlendMode.darken,
-                    ),
-                  )
-                : null,
-            gradient: customer.imageUrl == null || customer.imageUrl!.isEmpty
-                ? const LinearGradient(
-                    colors: [
-                      Color(0xFFE8DED5), // warm beige
-                      Color(0xFFC9B8A8), // soft taupe
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            color: customer.imageUrl != null && customer.imageUrl!.isNotEmpty
-                ? const Color(0xFF1B2430)
-                : null,
+    ButtonStyle actionStyle(Color rim, Color fg) => ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.surfaceContainerLowest,
+          foregroundColor: fg,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          minimumSize: const Size(48, 46),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: rim.withValues(alpha: 0.95), width: 1.5),
           ),
-          child: customer.imageUrl != null && customer.imageUrl!.isNotEmpty
-              ? Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.1),
-                        Colors.black.withValues(alpha: 0.8),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                )
-              : Center(
-                  child: Icon(
-                    Icons.home_outlined,
-                    size: 100,
-                    color: Colors.white.withValues(alpha: 0.15),
-                  ),
-                ),
-        ),
+        );
 
-        // Content
-        Positioned(
-          bottom: 24,
-          right: 24, // Assuming RTL, photo on the right
-          left: 24,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              // Photo
-              GestureDetector(
-                onTap: _isUpdatingPhoto ? null : _showPhotoPicker,
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: AppTheme.surfaceContainerLowest, width: 4),
-                    color: AppTheme.surfaceContainerHighest,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+    Widget avatar = GestureDetector(
+      onTap: _isUpdatingPhoto ? null : _showPhotoPicker,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 92,
+            height: 92,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.surfaceContainerLowest,
+                width: 3,
+              ),
+              color: AppTheme.surfaceContainerHighest,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.14),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _isUpdatingPhoto
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : hasPhoto
+                    ? CachedNetworkImage(
+                        imageUrl: customer.imageUrl!,
+                        fit: BoxFit.cover,
                       )
-                    ],
+                    : Center(
+                        child: Text(
+                          customer.cardName.isNotEmpty
+                              ? customer.cardName[0].toUpperCase()
+                              : '?',
+                          style: GoogleFonts.assistant(
+                            color: AppTheme.secondary,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+          ),
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceContainerLowest,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.outlineVariant.withValues(alpha: 0.35),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _isUpdatingPhoto
-                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                      : (customer.imageUrl != null && customer.imageUrl!.isNotEmpty)
-                          ? CachedNetworkImage(
-                              imageUrl: customer.imageUrl!,
-                              fit: BoxFit.cover,
-                            )
-                          : Center(
-                              child: Text(
-                                customer.cardName.isNotEmpty
-                                    ? customer.cardName[0].toUpperCase()
-                                    : '?',
-                                style: GoogleFonts.assistant(
-                                  color: AppTheme.secondary,
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.photo_camera_rounded,
+                  size: 14,
+                  color: AppTheme.secondary,
                 ),
               ),
-              const SizedBox(width: 20),
+            ),
+          ),
+        ],
+      ),
+    );
 
-              // Name and Badges
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: SizedBox(
+                height: 168,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        image: hasPhoto
+                            ? DecorationImage(
+                                image: CachedNetworkImageProvider(
+                                  customer.imageUrl!,
+                                ),
+                                fit: BoxFit.cover,
+                                colorFilter: ColorFilter.mode(
+                                  Colors.black.withValues(alpha: 0.45),
+                                  BlendMode.darken,
+                                ),
+                              )
+                            : null,
+                        gradient: hasPhoto
+                            ? null
+                            : const LinearGradient(
+                                colors: [
+                                  Color(0xFFE8DED5),
+                                  Color(0xFFC9B8A8),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                        color: hasPhoto ? const Color(0xFF1B2430) : null,
+                      ),
+                    ),
+                    if (hasPhoto)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.black.withValues(alpha: 0.05),
+                              Colors.black.withValues(alpha: 0.65),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      )
+                    else
+                      Center(
+                        child: Icon(
+                          Icons.home_work_outlined,
+                          size: 72,
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                      ),
+                    PositionedDirectional(
+                      top: 10,
+                      end: 10,
+                      child: IconButton.filled(
+                        onPressed: _isUpdatingPhoto ? null : _showPhotoPicker,
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.surfaceContainerLowest
+                              .withValues(alpha: 0.94),
+                          foregroundColor: AppTheme.secondary,
+                          elevation: 0,
+                          padding: const EdgeInsets.all(10),
+                          shape: const CircleBorder(),
+                        ),
+                        icon: const Icon(Icons.wallpaper_rounded, size: 22),
+                        tooltip: l10n?.tr('takePhoto') ?? 'Background photo',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              avatar,
+              const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
+                  children: [
                     Text(
                       customer.cardName,
                       style: GoogleFonts.assistant(
-                        fontSize: 32,
+                        fontSize: 26,
                         fontWeight: FontWeight.w800,
-                        color: customer.imageUrl != null && customer.imageUrl!.isNotEmpty
-                            ? Colors.white
-                            : AppTheme.onSurface,
-                        letterSpacing: -0.5,
+                        color: AppTheme.onSurface,
+                        letterSpacing: -0.4,
+                        height: 1.15,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        if (isVip)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFD700)
-                                  .withValues(alpha: 0.2),
-                              border:
-                                  Border.all(color: const Color(0xFFFFD700)),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                const Icon(Icons.star,
-                                    color: Color(0xFFFFD700), size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'V.I.P',
-                                  style: GoogleFonts.assistant(
-                                    color: const Color(0xFFFFD700),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (hasDebt)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppTheme.error.withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                const Icon(Icons.warning_amber_rounded,
-                                    color: Colors.white, size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'חוב פתוח: ₪${customer.remainingDebt.toStringAsFixed(0)}',
-                                  style: GoogleFonts.assistant(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      customer.customerName,
+                      style: GoogleFonts.assistant(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.onSurfaceVariant,
+                      ),
                     ),
+                    if (customer.remainingDebt > 0 ||
+                        isVip) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (isVip)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFD700)
+                                    .withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(0xFFFFD700)
+                                      .withValues(alpha: 0.65),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star_rounded,
+                                    color: Color(0xFFD4A300),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                        _trOrLocale(
+                                          context,
+                                          l10n,
+                                          'vipBadge',
+                                          en: 'VIP',
+                                          he: 'V.I.P',
+                                          ar: 'VIP',
+                                        ),
+                                    style: GoogleFonts.assistant(
+                                      color: const Color(0xFFB8860B),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (hasDebt)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color:
+                                      AppTheme.error.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.account_balance_wallet_outlined,
+                                    color: AppTheme.error,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                        '${_trOrLocale(
+                                          context,
+                                          l10n,
+                                          'openDebtLabel',
+                                          en: 'Open balance',
+                                          he: 'חוב פתוח',
+                                          ar: 'رصيد مفتوح',
+                                        )} · ₪${customer.remainingDebt.toStringAsFixed(0)}',
+                                    style: GoogleFonts.assistant(
+                                      color: AppTheme.error,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: onEditDetails,
+                        style: actionStyle(
+                          AppTheme.outlineVariant.withValues(alpha: 0.55),
+                          AppTheme.onSurface,
+                        ),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'editCustomerDetails',
+                            en: 'Edit details',
+                            he: 'עריכת פרטים',
+                            ar: 'تعديل البيانات',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: onSendReport,
+                        style: actionStyle(AppTheme.success, AppTheme.success),
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'sendAccountReport',
+                            en: 'Send report',
+                            he: 'שליחת דוח',
+                            ar: 'إرسال تقرير',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: () => showPaymentDialog(
+                          context,
+                          ref,
+                          l10n,
+                          initialCustomer: customer,
+                        ),
+                        style: actionStyle(
+                          AppTheme.secondary,
+                          AppTheme.secondary,
+                        ),
+                        icon: const Icon(Icons.payment_rounded, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'newPayment',
+                            en: 'New payment',
+                            he: 'תשלום חדש',
+                            ar: 'دفعة جديدة',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: onNewOrder,
+                        style:
+                            actionStyle(AppTheme.primary, AppTheme.primary),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'newOrder',
+                            en: 'New order',
+                            he: 'הזמנה חדשה',
+                            ar: 'طلب جديد',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Builder(
+                builder: (context) {
+                  final debt = customer.remainingDebt;
+                  final bool inDebt = debt > 0;
+                  final bool overpaid = debt < 0;
+                  final double amountToShow =
+                      overpaid ? (-debt) : debt; // display as positive
 
-        // Action Buttons Row (positioned to overlap bottom edge or just below)
-        Positioned(
-          top: 220,
-          left: 24,
-          right: 24,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              ElevatedButton.icon(
-                onPressed: onEditDetails,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.surfaceContainerLowest,
-                  foregroundColor: AppTheme.onSurface,
-                  elevation: 2,
-                  shadowColor: Colors.black.withValues(alpha: 0.1),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                        color: AppTheme.outlineVariant.withValues(alpha: 0.2)),
-                  ),
-                ),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: Text(
-                  'עריכת פרטים',
-                  style: GoogleFonts.assistant(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: onSendReport,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.success,
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  shadowColor: AppTheme.success.withValues(alpha: 0.3),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                label: Text(
-                  'שליחת דוח',
-                  style: GoogleFonts.assistant(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => showPaymentDialog(context, ref, l10n,
-                    initialCustomer: customer),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.secondary,
-                  foregroundColor: AppTheme.onSecondary,
-                  elevation: 2,
-                  shadowColor: AppTheme.secondary.withValues(alpha: 0.3),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.payment_rounded, size: 18),
-                label: Text(
-                  'תשלום חדש',
-                  style: GoogleFonts.assistant(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: onNewOrder,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: AppTheme.onPrimary,
-                  elevation: 2,
-                  shadowColor: AppTheme.primary.withValues(alpha: 0.3),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(
-                  'הזמנה חדשה',
-                  style: GoogleFonts.assistant(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                ),
+                  final Color textColor = inDebt
+                      ? AppTheme.error
+                      : (overpaid ? AppTheme.success : AppTheme.onSurface);
+                  final Color bgColor = inDebt
+                      ? AppTheme.error.withValues(alpha: 0.12)
+                      : (overpaid
+                          ? AppTheme.success.withValues(alpha: 0.12)
+                          : AppTheme.surfaceContainerHighest
+                              .withValues(alpha: 0.35));
+                  final Color borderColor = inDebt
+                      ? AppTheme.error.withValues(alpha: 0.35)
+                      : (overpaid
+                          ? AppTheme.success.withValues(alpha: 0.35)
+                          : AppTheme.outlineVariant.withValues(alpha: 0.22));
+
+                  final String label = inDebt
+                      ? _trOrLocale(
+                          context,
+                          l10n,
+                          'openDebtLabel',
+                          en: 'Open balance',
+                          he: 'חוב פתוח',
+                          ar: 'رصيد مفتوح',
+                        )
+                      : (overpaid
+                          ? _trOrLocale(
+                              context,
+                              l10n,
+                              'balanceOverpaidLabel',
+                              en: 'Overpaid',
+                              he: 'עודף ששולם',
+                              ar: 'مدفوعات زائدة',
+                            )
+                          : _trOrLocale(
+                              context,
+                              l10n,
+                              'balanceZeroLabel',
+                              en: 'Balance due',
+                              he: 'יתרת לתשלום',
+                              ar: 'الحد المستحق',
+                            ));
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Text(
+                      '$label · ₪${amountToShow.toStringAsFixed(0)}',
+                      style: GoogleFonts.assistant(
+                        color: textColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -648,38 +978,75 @@ class _ContactInfoCard extends StatelessWidget {
 
   const _ContactInfoCard({required this.customer, required this.l10n});
 
+  Future<void> _dial(
+    BuildContext context,
+    AppLocalizations? l10n,
+    String raw,
+  ) async {
+    final cleaned = raw.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleaned.isEmpty) return;
+    final uri = Uri.parse('tel:$cleaned');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n?.tr('error') ?? 'Error'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openMaps(BuildContext context, String query) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}',
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {/* ignore */}
+  }
+
   @override
   Widget build(BuildContext context) {
     return _SidebarCard(
-      title: 'פרטי התקשרות',
+      title: _trOrLocale(
+        context,
+        l10n,
+        'contactDetails',
+        en: 'Contact',
+        he: 'פרטי התקשרות',
+        ar: 'بيانات الاتصال',
+      ),
       icon: Icons.contact_page_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           _ContactRow(
-            icon: Icons.person_outline,
+            icon: Icons.person_outline_rounded,
             text: customer.customerName,
             onTap: () {},
           ),
-          if (customer.phones.isNotEmpty) const SizedBox(height: 16),
+          if (customer.phones.isNotEmpty) const SizedBox(height: 14),
           if (customer.phones.isNotEmpty)
             _ContactRow(
               icon: Icons.phone_outlined,
               text: customer.phones.join(', '),
-              onTap: () {
-                // TODO: url launcher tel:
-              },
+              onTap: () => _dial(context, l10n, customer.phones.first),
             ),
-          if (customer.phones.isNotEmpty) const SizedBox(height: 16),
+          if (customer.phones.isNotEmpty) const SizedBox(height: 14),
           if (customer.location != null && customer.location!.isNotEmpty)
             _ContactRow(
               icon: Icons.location_on_outlined,
               text: customer.location!,
-              onTap: () {
-                // TODO: maps
-              },
+              onTap: () => _openMaps(context, customer.location!),
             ),
-          // Email omitted because customer model doesn't explicitly have email yet, but could be added
         ],
       ),
     );
@@ -696,28 +1063,32 @@ class _ContactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(icon, size: 20, color: AppTheme.secondary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: GoogleFonts.assistant(
-                  fontSize: 15,
-                  color: AppTheme.onSurface,
-                  fontWeight: FontWeight.w500,
-                  height: 1.4,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(icon, size: 22, color: AppTheme.secondary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.start,
+                  style: GoogleFonts.assistant(
+                    fontSize: 15,
+                    color: AppTheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -726,32 +1097,178 @@ class _ContactRow extends StatelessWidget {
 
 // ─── Notes Card ─────────────────────────────────────────────────────────────
 
-class _NotesCard extends StatelessWidget {
-  final String notes;
+class _EditableNotesCard extends ConsumerStatefulWidget {
+  final String customerId;
+  final String initialNotes;
   final AppLocalizations? l10n;
+  final ValueChanged<String> onSaved;
 
-  const _NotesCard({required this.notes, required this.l10n});
+  const _EditableNotesCard({
+    required this.customerId,
+    required this.initialNotes,
+    required this.l10n,
+    required this.onSaved,
+  });
+
+  @override
+  ConsumerState<_EditableNotesCard> createState() => _EditableNotesCardState();
+}
+
+class _EditableNotesCardState extends ConsumerState<_EditableNotesCard> {
+  late final TextEditingController _ctrl;
+  bool _editing = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialNotes);
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditableNotesCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing && oldWidget.initialNotes != widget.initialNotes) {
+      _ctrl.text = widget.initialNotes;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final username = ref.read(currentUsernameProvider);
+    final next = _ctrl.text.trim();
+    try {
+      await ref.read(customerServiceProvider).update(
+        widget.customerId,
+        {'notes': next, 'updated_by': username},
+      );
+      ref.invalidate(customersProvider);
+      if (mounted) {
+        setState(() => _editing = false);
+        widget.onSaved(next);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.l10n?.tr('error') ?? 'Error'}: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = widget.l10n;
     return _SidebarCard(
-      title: 'הערות מערכת',
-      icon: Icons.note_outlined,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.warning.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+      title: _trOrLocale(
+        context,
+        l10n,
+        'systemNotes',
+        en: 'Notes',
+        he: 'הערות מערכת',
+        ar: 'ملاحظات النظام',
+      ),
+      icon: Icons.sticky_note_2_outlined,
+      trailing: IconButton(
+        tooltip: _editing ? (l10n?.tr('cancel') ?? 'Cancel') : (l10n?.tr('edit') ?? 'Edit'),
+        onPressed: _saving
+            ? null
+            : () {
+                setState(() {
+                  if (_editing) {
+                    _ctrl.text = widget.initialNotes;
+                  }
+                  _editing = !_editing;
+                });
+              },
+        icon: Icon(
+          _editing ? Icons.close_rounded : Icons.edit_outlined,
+          color: AppTheme.onSurfaceVariant,
         ),
-        child: Text(
-          notes,
-          style: GoogleFonts.assistant(
-            fontSize: 14,
-            color: AppTheme.onSurfaceVariant,
-            height: 1.5,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _ctrl,
+            enabled: _editing && !_saving,
+            maxLines: 4,
+            style: GoogleFonts.assistant(
+              fontSize: 14,
+              color: AppTheme.onSurface,
+              height: 1.55,
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppTheme.secondaryContainer.withValues(alpha: 0.20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.22),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.22),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: AppTheme.secondary, width: 1.8),
+              ),
+              contentPadding: const EdgeInsets.all(16),
+            ),
           ),
-        ),
+          if (_editing) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() {
+                            _ctrl.text = widget.initialNotes;
+                            _editing = false;
+                          });
+                        },
+                  child: Text(l10n?.tr('cancel') ?? 'Cancel'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.secondary,
+                    foregroundColor: AppTheme.onPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(l10n?.tr('save') ?? 'Save'),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -761,48 +1278,86 @@ class _SidebarCard extends StatelessWidget {
   final String title;
   final IconData icon;
   final Widget child;
+  final Widget? trailing;
+  final Widget? titleBadge;
 
   const _SidebarCard({
     required this.title,
     required this.icon,
     required this.child,
+    this.trailing,
+    this.titleBadge,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: AppTheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.15)),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: AppTheme.outlineVariant.withValues(alpha: 0.2),
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color.fromRGBO(26, 28, 28, 0.04),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          )
+            color: Colors.black.withValues(alpha: 0.045),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Icon(icon, size: 20, color: AppTheme.onSurfaceVariant),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: AppTheme.secondary),
+              ),
               const SizedBox(width: 12),
-              Text(
-                title,
-                style: GoogleFonts.assistant(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.onSurface,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      textAlign: TextAlign.start,
+                      style: GoogleFonts.assistant(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Container(
+                        height: 3,
+                        width: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              if (titleBadge != null) ...[
+                const SizedBox(width: 8),
+                titleBadge!,
+              ],
+              if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           child,
         ],
       ),
@@ -815,235 +1370,254 @@ class _SidebarCard extends StatelessWidget {
 class _OrdersListSection extends StatelessWidget {
   final AsyncValue<List<Order>> ordersAsync;
   final AppLocalizations? l10n;
+  final VoidCallback onViewAll;
 
-  const _OrdersListSection({required this.ordersAsync, required this.l10n});
+  const _OrdersListSection({
+    required this.ordersAsync,
+    required this.l10n,
+    required this.onViewAll,
+  });
+
+  Widget _countBadge(int n) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.secondary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppTheme.secondary.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Text(
+        n.toString(),
+        style: GoogleFonts.assistant(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: AppTheme.secondary,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Text(
-                  'היסטוריית הזמנות',
-                  style: GoogleFonts.assistant(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ordersAsync.when(
-                  data: (orders) => Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      orders.length.toString(),
-                      style: GoogleFonts.assistant(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  ),
-                  loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
-                ),
-              ],
+    final title = _trOrLocale(
+      context,
+      l10n,
+      'orderHistory',
+      en: 'Order history',
+      he: 'היסטוריית הזמנות',
+      ar: 'سجل الطلبات',
+    );
+    final viewAllLabel = _trOrLocale(
+      context,
+      l10n,
+      'viewAll',
+      en: 'View all',
+      he: 'צפה בכולם',
+      ar: 'عرض الكل',
+    );
+
+    return ordersAsync.when(
+      data: (orders) {
+        return _SidebarCard(
+          title: title,
+          icon: Icons.receipt_long_rounded,
+          titleBadge: orders.isEmpty ? null : _countBadge(orders.length),
+          trailing: TextButton(
+            onPressed: onViewAll,
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.secondary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                'צפה בכולם',
-                style: GoogleFonts.assistant(
-                  color: AppTheme.secondary,
-                  fontWeight: FontWeight.w600,
-                ),
+            child: Text(
+              viewAllLabel,
+              style: GoogleFonts.assistant(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: AppTheme.outlineVariant.withValues(alpha: 0.15)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: ordersAsync.when(
-            data: (orders) {
-              if (orders.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                    child: Text(
-                      'אין הזמנות ללקוח זה',
-                      style: GoogleFonts.assistant(
-                        color: AppTheme.onSurfaceVariant,
-                        fontSize: 15,
-                      ),
+          child: orders.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                        _trOrLocale(
+                          context,
+                          l10n,
+                          'noOrdersForCustomer',
+                          en: 'This customer has no orders yet.',
+                          he: 'ללקוח זה אין עדיין הזמנות.',
+                          ar: 'لا توجد طلبات لهذا العميل بعد.',
+                        ),
+                    textAlign: TextAlign.start,
+                    style: GoogleFonts.assistant(
+                      color: AppTheme.onSurfaceVariant,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                );
-              }
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: orders.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  color: AppTheme.outlineVariant.withValues(alpha: 0.15),
+                )
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: orders.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.12),
+                    ),
+                    itemBuilder: (context, index) {
+                      return _OrderRow(order: orders[index], l10n: l10n);
+                    },
+                  ),
                 ),
-                itemBuilder: (context, index) {
-                  return _OrderRow(order: orders[index]);
-                },
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(child: Text('שגיאה בטעינת הזמנות: $e')),
-            ),
-          ),
+        );
+      },
+      loading: () => _SidebarCard(
+        title: title,
+        icon: Icons.receipt_long_rounded,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
         ),
-      ],
+      ),
+      error: (e, _) => _SidebarCard(
+        title: title,
+        icon: Icons.receipt_long_rounded,
+        child: Text(
+          '${l10n?.tr('error') ?? 'Error'}: $e',
+          textAlign: TextAlign.start,
+          style: GoogleFonts.assistant(color: AppTheme.error),
+        ),
+      ),
     );
   }
 }
 
 class _OrderRow extends StatelessWidget {
   final Order order;
+  final AppLocalizations? l10n;
 
-  const _OrderRow({required this.order});
-
-  String _getStatusName(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.active:
-        return 'פתוחה';
-      case OrderStatus.preparing:
-        return 'בהכנה';
-      case OrderStatus.inAssembly:
-        return 'בהרכבה';
-      case OrderStatus.awaitingShipping:
-        return 'ממתין למשלוח';
-      case OrderStatus.handled:
-        return 'טופל';
-      case OrderStatus.delivered:
-        return 'סופקה';
-      case OrderStatus.canceled:
-        return 'בוטלה';
-    }
-  }
+  const _OrderRow({required this.order, required this.l10n});
 
   @override
   Widget build(BuildContext context) {
-    final bool isDelivered = order.status == OrderStatus.delivered;
-    final statusColor = isDelivered ? AppTheme.success : AppTheme.warning;
+    final statusColor = orderStatusColor(order.status);
+    final statusLabel =
+        orderStatusLocalizedLabel(order.status, l10n);
+    final locale = Localizations.localeOf(context).toString();
+    final created = order.createdAt ?? DateTime.now();
+    final dateStr = DateFormat.yMMMd(locale).format(created);
+    final bodiesWord = _trOrLocale(
+      context,
+      l10n,
+      'bodies',
+      en: 'items',
+      he: 'גופים',
+      ar: 'وحدات',
+    );
 
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => OrderFormScreen(orderId: order.id),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
-          children: <Widget>[
-            // Thumbnail Placeholder
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.inventory_2_outlined,
-                  color: AppTheme.outline, size: 24),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => OrderFormScreen(orderId: order.id),
             ),
-            const SizedBox(width: 16),
-
-            // Order details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppTheme.outlineVariant.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Icon(
+                  Icons.receipt_long_rounded,
+                  color: AppTheme.secondary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      '#${order.orderNumber ?? order.id.substring(0, 6)}',
+                      textAlign: TextAlign.start,
+                      style: GoogleFonts.assistant(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${order.items.length} $bodiesWord · $dateStr',
+                      textAlign: TextAlign.start,
+                      style: GoogleFonts.assistant(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
                   Text(
-                    'הזמנה #${order.orderNumber ?? order.id.substring(0, 6)}',
+                    '₪${order.totalPrice.toStringAsFixed(0)}',
+                    textAlign: TextAlign.end,
                     style: GoogleFonts.assistant(
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       color: AppTheme.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${order.items.length} פריטים • ${order.createdAt.toString().split(' ').first}',
-                    style: GoogleFonts.assistant(
-                      fontSize: 13,
-                      color: AppTheme.onSurfaceVariant,
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: GoogleFonts.assistant(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-
-            // Status and Price
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Text(
-                  '₪${order.totalPrice.toStringAsFixed(0)}',
-                  style: GoogleFonts.assistant(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    _getStatusName(order.status),
-                    style: GoogleFonts.assistant(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1052,145 +1626,216 @@ class _OrderRow extends StatelessWidget {
 
 // ─── Payments List Section ──────────────────────────────────────────────────
 
-class _PaymentsListSection extends StatelessWidget {
+class _PaymentsListSection extends ConsumerWidget {
+  final Customer customer;
   final AsyncValue<List<Payment>> paymentsAsync;
   final AppLocalizations? l10n;
 
-  const _PaymentsListSection({required this.paymentsAsync, required this.l10n});
+  const _PaymentsListSection({
+    required this.customer,
+    required this.paymentsAsync,
+    required this.l10n,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(
-              'פעילות תשלומים אחרונה',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = _trOrLocale(
+      context,
+      l10n,
+      'recentPaymentActivity',
+      en: 'Recent payments',
+      he: 'פעילות תשלומים אחרונה',
+      ar: 'آخر المدفوعات',
+    );
+    final viewAllLabel = _trOrLocale(
+      context,
+      l10n,
+      'viewAll',
+      en: 'View all',
+      he: 'צפה בכולם',
+      ar: 'عرض الكل',
+    );
+
+    void goPayments() {
+      ref.read(paymentsCustomerFilterProvider.notifier).setFilter(customer);
+      ref.read(selectedNavIndexProvider.notifier).setIndex(4);
+      Navigator.of(context).pop();
+    }
+
+    return paymentsAsync.when(
+      data: (payments) {
+        return _SidebarCard(
+          title: title,
+          icon: Icons.payments_rounded,
+          trailing: TextButton(
+            onPressed: goPayments,
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.secondary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              viewAllLabel,
               style: GoogleFonts.assistant(
-                fontSize: 20,
+                color: AppTheme.secondary,
                 fontWeight: FontWeight.w800,
-                color: AppTheme.onSurface,
+                fontSize: 14,
               ),
             ),
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                'צפה בכולם',
-                style: GoogleFonts.assistant(
-                  color: AppTheme.secondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: AppTheme.outlineVariant.withValues(alpha: 0.15)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: paymentsAsync.when(
-            data: (payments) {
-              if (payments.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                    child: Text(
-                      'אין תשלומים ללקוח זה',
-                      style: GoogleFonts.assistant(
-                        color: AppTheme.onSurfaceVariant,
-                        fontSize: 15,
-                      ),
+          child: payments.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    _trOrLocale(
+                      context,
+                      l10n,
+                      'noPaymentsForCustomer',
+                      en: 'No payments recorded for this customer yet.',
+                      he: 'אין תשלומים רשומים ללקוח זה.',
+                      ar: 'لا توجد مدفوعات مسجلة لهذا العميل بعد.',
+                    ),
+                    textAlign: TextAlign.start,
+                    style: GoogleFonts.assistant(
+                      color: AppTheme.onSurfaceVariant,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                );
-              }
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: payments.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  color: AppTheme.outlineVariant.withValues(alpha: 0.15),
+                )
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: payments.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.12),
+                    ),
+                    itemBuilder: (context, index) {
+                      return _PaymentRow(
+                        payment: payments[index],
+                        l10n: l10n,
+                      );
+                    },
+                  ),
                 ),
-                itemBuilder: (context, index) {
-                  return _PaymentRow(payment: payments[index]);
-                },
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(child: Text('שגיאה בטעינת תשלומים: $e')),
-            ),
-          ),
+        );
+      },
+      loading: () => _SidebarCard(
+        title: title,
+        icon: Icons.payments_rounded,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
         ),
-      ],
+      ),
+      error: (e, _) => _SidebarCard(
+        title: title,
+        icon: Icons.payments_rounded,
+        child: Text(
+          '${l10n?.tr('error') ?? 'Error'}: $e',
+          textAlign: TextAlign.start,
+          style: GoogleFonts.assistant(color: AppTheme.error),
+        ),
+      ),
     );
   }
 }
 
 class _PaymentRow extends StatelessWidget {
   final Payment payment;
+  final AppLocalizations? l10n;
 
-  const _PaymentRow({required this.payment});
+  const _PaymentRow({required this.payment, required this.l10n});
+
+  String _typeLabel(BuildContext context) {
+    switch (payment.type) {
+      case PaymentType.cash:
+        return _trOrLocale(
+          context,
+          l10n,
+          'cash',
+          en: 'Cash',
+          he: 'מזומן',
+          ar: 'نقدي',
+        );
+      case PaymentType.credit:
+        return _trOrLocale(
+          context,
+          l10n,
+          'credit',
+          en: 'Credit',
+          he: 'אשראי',
+          ar: 'بطاقة ائتمان',
+        );
+      case PaymentType.check:
+        return _trOrLocale(
+          context,
+          l10n,
+          'check',
+          en: 'Check',
+          he: 'צ\'ק',
+          ar: 'شيك',
+        );
+    }
+  }
+
+  IconData _typeIcon() {
+    switch (payment.type) {
+      case PaymentType.credit:
+        return Icons.credit_card_rounded;
+      case PaymentType.cash:
+        return Icons.payments_rounded;
+      case PaymentType.check:
+        return Icons.receipt_long_rounded;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    IconData typeIcon = Icons.payment;
-    if (payment.type == PaymentType.credit) {
-      typeIcon = Icons.credit_card;
-    } else if (payment.type == PaymentType.cash) {
-      typeIcon = Icons.attach_money;
-    } else if (payment.type == PaymentType.check) {
-      typeIcon = Icons.receipt_long;
-    }
+    final locale = Localizations.localeOf(context).toString();
+    final dateStr = DateFormat.yMMMd(locale).format(payment.date);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       child: Row(
         children: <Widget>[
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.success.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              color: AppTheme.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppTheme.success.withValues(alpha: 0.22),
+              ),
             ),
-            child: Icon(typeIcon, color: AppTheme.success, size: 20),
+            child: Icon(_typeIcon(), color: AppTheme.success, size: 22),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  payment.type.dbValue,
+                  _typeLabel(context),
+                  textAlign: TextAlign.start,
                   style: GoogleFonts.assistant(
                     fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: AppTheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  payment.date.toString().split(' ').first,
+                  dateStr,
+                  textAlign: TextAlign.start,
                   style: GoogleFonts.assistant(
                     fontSize: 13,
+                    fontWeight: FontWeight.w500,
                     color: AppTheme.onSurfaceVariant,
                   ),
                 ),
@@ -1199,6 +1844,7 @@ class _PaymentRow extends StatelessWidget {
           ),
           Text(
             '+ ₪${payment.amount.toStringAsFixed(0)}',
+            textAlign: TextAlign.end,
             style: GoogleFonts.assistant(
               fontSize: 16,
               fontWeight: FontWeight.w800,

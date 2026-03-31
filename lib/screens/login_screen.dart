@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_theme.dart';
 import '../providers/providers.dart';
+import '../widgets/brand_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -116,32 +117,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // Logo
-                        Container(
-                          width: 72,
-                          height: 72,
+                        DecoratedBox(
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppTheme.secondaryContainer.withValues(alpha: 0.2),
                             boxShadow: [
                               BoxShadow(
-                                color: AppTheme.secondaryContainer.withValues(alpha: 0.15),
-                                blurRadius: 32,
-                                spreadRadius: 8,
+                                color: AppTheme.secondaryContainer.withValues(alpha: 0.22),
+                                blurRadius: 38,
+                                spreadRadius: 6,
+                                offset: const Offset(0, 12),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 18,
+                                offset: const Offset(0, 10),
                               ),
                             ],
                           ),
-                          child: const Center(
-                            child: Icon(Icons.wb_incandescent_rounded, size: 36, color: AppTheme.secondary),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Royal Light',
-                          style: GoogleFonts.assistant(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                            color: AppTheme.onSurface,
+                          child: const BrandLogo(
+                            width: 180,
+                            height: 180,
+                            fit: BoxFit.contain,
                           ),
                         ),
                         const SizedBox(height: 40),
@@ -151,7 +146,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
                             color: AppTheme.surfaceContainerLowest,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: AppTheme.outlineVariant.withValues(alpha: 0.15),
                             ),
@@ -194,7 +189,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   margin: const EdgeInsets.only(bottom: 20),
                                   decoration: BoxDecoration(
                                     color: AppTheme.error.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
                                       color: AppTheme.error.withValues(alpha: 0.25),
                                     ),
@@ -245,7 +240,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   foregroundColor: AppTheme.onPrimary,
                                   padding: const EdgeInsets.symmetric(vertical: 18),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(18),
                                   ),
                                   elevation: 0,
                                 ).copyWith(
@@ -320,10 +315,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     required String hint,
     bool isPassword = false,
   }) {
+    const radius = 18.0;
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: AppTheme.outlineVariant.withValues(alpha: 0.22),
+        ),
       ),
       child: Directionality(
         textDirection: TextDirection.ltr,
@@ -335,11 +334,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             hintText: hint,
             hintStyle: TextStyle(color: AppTheme.outline.withValues(alpha: 0.4)),
             prefixIcon: Icon(icon, color: AppTheme.outline, size: 20),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
+            filled: true,
+            fillColor: Colors.transparent,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(radius),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(radius),
+              borderSide: BorderSide.none,
+            ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppTheme.secondary, width: 2),
+              borderRadius: BorderRadius.circular(radius),
+              borderSide: const BorderSide(color: AppTheme.secondary, width: 1.8),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),

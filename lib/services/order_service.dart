@@ -93,6 +93,46 @@ class OrderService {
         .eq('id', id);
   }
 
+  /// Starts warranty counting for order items (if not started yet).
+  ///
+  /// Rule:
+  /// - If order status is Delivered -> start date = delivery_date if set, else today.
+  /// - Else if delivery_date <= today -> start date = delivery_date.
+  /// - Only applies to items with warranty_years > 0 and warranty_start_date is null.
+  Future<void> startWarrantyIfEligible(String orderId, String username) async {
+    final order = await _client
+        .from('orders')
+        .select('status, delivery_date')
+        .eq('id', orderId)
+        .single();
+
+    final status = order['status'] as String?;
+    final deliveryRaw = order['delivery_date'] as String?;
+    final deliveryDate = deliveryRaw != null ? DateTime.parse(deliveryRaw) : null;
+
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    DateTime? start;
+    if (status == OrderStatus.delivered.dbValue) {
+      start = deliveryDate ?? todayDate;
+    } else if (deliveryDate != null) {
+      final dd = DateTime(deliveryDate.year, deliveryDate.month, deliveryDate.day);
+      if (!dd.isAfter(todayDate)) start = dd;
+    }
+    if (start == null) return;
+
+    await _client
+        .from('order_items')
+        .update({
+          'warranty_start_date': start.toIso8601String().split('T').first,
+          'updated_by': username,
+        })
+        .eq('order_id', orderId)
+        .gt('warranty_years', 0)
+        .isFilter('warranty_start_date', null);
+  }
+
   Future<void> cancelOrder(String id, String username) async {
     await _client
         .from('orders')

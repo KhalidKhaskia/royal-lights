@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
+import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../../providers/providers.dart';
+import '../../theme/order_status_colors.dart';
+import '../../widgets/app_dropdown_styles.dart';
+import '../../widgets/editorial_screen_title.dart';
 import 'order_form_screen.dart';
 
 class OrdersScreen extends ConsumerStatefulWidget {
@@ -17,7 +22,7 @@ class OrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
-  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
   String _statusFilter = 'All';
   String _createdByFilter = 'All';
   int _sortColumnIndex = 3;
@@ -25,10 +30,201 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   String? _updatingOrderId;
   int _currentPage = 1;
   final int _rowsPerPage = 15;
+
+  static const String _cancelAndNotifyValue = '__cancel_and_notify__';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _searchQuery => _searchCtrl.text.trim().toLowerCase();
+
+  void _resetFilters() {
+    ref.read(ordersCustomerFilterProvider.notifier).setFilter(null);
+    setState(() {
+      _searchCtrl.clear();
+      _statusFilter = 'All';
+      _createdByFilter = 'All';
+      _currentPage = 1;
+    });
+  }
+
+  /// Localized orders search label; falls back if ARB key is missing (e.g. stale bundle).
+  String _ordersSearchFieldLabel() {
+    final l10n = AppLocalizations.of(context);
+    final t = l10n?.tr('searchOrdersHint');
+    if (t != null && t.isNotEmpty && t != 'searchOrdersHint') return t;
+    return switch (Localizations.localeOf(context).languageCode) {
+      'ar' => 'بحث برقم الطلب أو البطاقة أو اسم العميل…',
+      'en' => 'Search by order #, card name, customer…',
+      _ => 'חיפוש לפי מספר הזמנה, כרטיס, שם לקוח…',
+    };
+  }
+
+  String _t(AppLocalizations? l10n, String key, String fallback) {
+    final v = l10n?.tr(key);
+    if (v != null && v.isNotEmpty && v != key) return v;
+    return fallback;
+  }
+
+  String _cancelSupplierMessageTemplate({
+    required String languageCode,
+    required Order order,
+    required String itemsText,
+  }) {
+    final orderNo = order.orderNumber?.toString() ?? '-';
+    return switch (languageCode) {
+      'en' =>
+        'Order cancellation notice\nOrder #$orderNo\n\n$itemsText\n\nPlease confirm cancellation.',
+      'ar' =>
+        'إشعار إلغاء الطلب\nرقم الطلب #$orderNo\n\n$itemsText\n\nيرجى تأكيد الإلغاء.',
+      _ =>
+        'הודעת ביטול הזמנה\nהזמנה #$orderNo\n\n$itemsText\n\nנא לאשר ביטול.',
+    };
+  }
+
+  Future<void> _notifySuppliersOrderCanceled(Order order) async {
+    final lang = Localizations.localeOf(context).languageCode;
+
+    // Group items by supplier phone (one WhatsApp message per supplier).
+    final Map<String, List<dynamic>> byPhone = {};
+    for (final item in order.items) {
+      final phone = (item.supplierPhone ?? '').trim();
+      if (phone.isEmpty) continue;
+      (byPhone[phone] ??= []).add(item);
+    }
+
+    for (final entry in byPhone.entries) {
+      final phone = entry.key.replaceAll(RegExp(r'[^\d+]'), '');
+      if (phone.isEmpty) continue;
+
+      final itemsText = entry.value.map((dynamic it) {
+        final item = it as dynamic;
+        final code = (item.itemNumber as String?)?.trim();
+        final name = (item.name as String?)?.trim() ?? '';
+        final qty = (item.quantity as int?) ?? 1;
+        final codePart = (code != null && code.isNotEmpty) ? '($code)\n' : '';
+        return '$codePart$name\nQty: $qty';
+      }).join('\n\n');
+
+      final message = _cancelSupplierMessageTemplate(
+        languageCode: lang,
+        order: order,
+        itemsText: itemsText,
+      );
+
+      final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
+      try {
+        await launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        // WhatsApp not available / error launching URL.
+      }
+    }
+  }
+
+  Future<void> _cancelOrderAndNotifySuppliers(String orderId) async {
+    final l10n = AppLocalizations.of(context);
+    if (_updatingOrderId != null) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(
+            _t(l10n, 'cancelOrder', 'Cancel order'),
+            style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            _t(
+              l10n,
+              'confirmCancelOrder',
+              'This will cancel the order and open a WhatsApp message to the supplier(s) with the canceled items.',
+            ),
+            style: GoogleFonts.assistant(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(_t(l10n, 'cancel', 'Cancel')),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.cancel_rounded, size: 18),
+              label: Text(_t(l10n, 'cancelAndNotifySupplier', 'Cancel & notify supplier')),
+            ),
+          ],
+        );
+      },
+    );
+    if (ok != true) return;
+
+    setState(() => _updatingOrderId = orderId);
+    try {
+      final service = ref.read(orderServiceProvider);
+      final fullOrder = await service.getById(orderId);
+
+      // Open WhatsApp chats (user still taps "Send" in WhatsApp).
+      await _notifySuppliersOrderCanceled(fullOrder);
+
+      final username = ref.read(currentUsernameProvider);
+      await service.cancelOrder(orderId, username);
+
+      ref.invalidate(ordersProvider);
+      ref.invalidate(customersProvider);
+      ref.invalidate(totalUnpaidDebtsProvider);
+      final fc = ref.read(ordersCustomerFilterProvider);
+      if (fc != null) {
+        ref.invalidate(customerOrdersProvider(fc.id));
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _t(l10n, 'canceled', 'Canceled'),
+            style: GoogleFonts.assistant(),
+          ),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${_t(l10n, 'error', 'Error')}: $e',
+            style: GoogleFonts.assistant(),
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _updatingOrderId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final ordersAsync = ref.watch(ordersProvider);
+    final ordersCustomerFilter = ref.watch(ordersCustomerFilterProvider);
+    final customersAsync = ref.watch(customersProvider);
+    final ordersAsync = ordersCustomerFilter != null
+        ? ref.watch(customerOrdersProvider(ordersCustomerFilter.id))
+        : ref.watch(ordersProvider);
+
+    ref.listen<Customer?>(ordersCustomerFilterProvider, (previous, next) {
+      if (previous?.id == next?.id || !mounted) return;
+      setState(() => _currentPage = 1);
+    });
+
+    final customers = customersAsync.value ?? [];
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceContainerLowest,
@@ -53,35 +249,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ─── Editorial Header ────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n?.tr('orders') ?? 'ניהול הזמנות',
-                  style: GoogleFonts.assistant(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'מעקב וניהול אחר הזמנות הלקוחות' , 
-                  style: GoogleFonts.assistant(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+          EditorialScreenTitle(
+            title: l10n?.tr('orders') ?? 'Orders',
           ),
-          
-// removed standalone top bar
 
           // ─── Orders Table ─────────────────────────────
           Expanded(
@@ -153,64 +323,191 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     children: [
                       // ─── Search & Filter Control Bar ──────────────
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                        child: Row(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(l10n?.tr('search') ?? 'חיפוש', style: GoogleFonts.assistant(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.onSurfaceVariant)),
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                                      borderRadius: BorderRadius.circular(12),
+                            if (ordersCustomerFilter != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.person_pin_circle_outlined,
+                                      size: 22,
+                                      color: AppTheme.secondary,
                                     ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        '${ordersCustomerFilter.cardName} — ${ordersCustomerFilter.customerName}',
+                                        style: GoogleFonts.assistant(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          color: AppTheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        ref
+                                            .read(
+                                              ordersCustomerFilterProvider
+                                                  .notifier,
+                                            )
+                                            .setFilter(null);
+                                        setState(() {
+                                          _currentPage = 1;
+                                        });
+                                      },
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        l10n?.tr('clearFilter') ??
+                                            'Clear filter',
+                                        style: GoogleFonts.assistant(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppTheme.secondary,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Material(
+                                    elevation: 2,
+                                    shadowColor:
+                                        Colors.black.withValues(alpha: 0.06),
+                                    borderRadius: BorderRadius.circular(20),
                                     child: TextField(
-                                      onChanged: (v) => setState(() {
-                                        _searchQuery = v.toLowerCase();
+                                      controller: _searchCtrl,
+                                      onChanged: (_) => setState(() {
                                         _currentPage = 1;
                                       }),
-                                      style: GoogleFonts.assistant(fontSize: 14, color: AppTheme.onSurface),
+                                      style: GoogleFonts.assistant(
+                                        color: AppTheme.onSurface,
+                                      ),
                                       decoration: InputDecoration(
-                                        hintText: l10n?.tr('search') ?? 'חיפוש חופשי (הזמנה, כרטיס, לקוח)...',
-                                        hintStyle: GoogleFonts.assistant(
-                                          color: AppTheme.onSurfaceVariant.withValues(alpha: 0.6),
+                                        floatingLabelBehavior:
+                                            FloatingLabelBehavior.auto,
+                                        floatingLabelAlignment:
+                                            FloatingLabelAlignment.start,
+                                        labelText: _ordersSearchFieldLabel(),
+                                        labelStyle: GoogleFonts.assistant(
+                                          color: AppTheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
                                         ),
-                                        prefixIcon: Icon(Icons.search_rounded, 
-                                            size: 20, color: AppTheme.onSurfaceVariant),
-                                        border: InputBorder.none,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        floatingLabelStyle:
+                                            GoogleFonts.assistant(
+                                          color: AppTheme.secondary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.search_rounded,
+                                          color: AppTheme.secondary,
+                                        ),
+                                        filled: true,
+                                        fillColor:
+                                            AppTheme.surfaceContainerLowest,
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          borderSide: BorderSide(
+                                            color: AppTheme.outlineVariant
+                                                .withValues(alpha: 0.35),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          borderSide: BorderSide(
+                                            color: AppTheme.outlineVariant
+                                                .withValues(alpha: 0.35),
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          borderSide: const BorderSide(
+                                            color: AppTheme.secondary,
+                                            width: 1.6,
+                                          ),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.fromLTRB(
+                                          8,
+                                          14,
+                                          12,
+                                          14,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(l10n?.tr('createdBy') ?? 'נוצר ע״י', style: GoogleFonts.assistant(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.onSurfaceVariant)),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  width: 140,
-                                  height: 44,
-                                  child: _buildCreatedByDropdown(uniqueCreators, l10n),
+                                ),
+                                const SizedBox(width: 12),
+                                FilledButton.tonalIcon(
+                                  onPressed: _resetFilters,
+                                  icon: const Icon(
+                                      Icons.restart_alt_rounded, size: 22),
+                                  label: Text(
+                                    l10n?.tr('resetFilters') ??
+                                        'Reset filters',
+                                    style: GoogleFonts.assistant(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    backgroundColor: AppTheme.secondaryContainer
+                                        .withValues(alpha: 0.45),
+                                    foregroundColor: AppTheme.secondary,
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 10,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Text(l10n?.tr('status') ?? 'סטטוס', style: GoogleFonts.assistant(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.onSurfaceVariant)),
-                                const SizedBox(height: 4),
                                 SizedBox(
-                                  width: 140,
-                                  height: 44,
+                                  width: 280,
+                                  child: _buildCardNameFilterDropdown(
+                                    customers,
+                                    ordersCustomerFilter,
+                                    l10n,
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 220,
+                                  child: _buildCreatedByDropdown(
+                                      uniqueCreators, l10n),
+                                ),
+                                SizedBox(
+                                  width: 240,
                                   child: _buildStatusDropdown(l10n),
                                 ),
                               ],
@@ -218,8 +515,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                           ],
                         ),
                       ),
-                      
-                      const Divider(height: 1),
                       
                       Expanded(
                         child: filtered.isEmpty 
@@ -234,24 +529,20 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                 ),
                               )
                             : SingleChildScrollView(
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.surfaceContainerLowest,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: AppTheme.outlineVariant.withValues(alpha: 0.2),
-                                    ),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      return SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        physics: const BouncingScrollPhysics(),
-                                        child: ConstrainedBox(
-                                          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      physics: const BouncingScrollPhysics(),
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                            minWidth: constraints.maxWidth),
+                                        child: ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            topRight: Radius.circular(16),
+                                          ),
                                           child: DataTable(
                           showCheckboxColumn: false,
                           headingRowHeight: 52,
@@ -304,7 +595,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                             ),
                           ],
                           rows: paginatedFiltered.map((order) {
-                          final statusColor = _statusColor(order.status);
+                          final statusColor = orderStatusColor(order.status);
                           final isUpdating = _updatingOrderId == order.id;
 
                           return DataRow(
@@ -362,27 +653,118 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                   enabled: !isUpdating,
                                   tooltip: l10n?.tr('changeStatus') ?? 'שנה סטטוס',
                                   padding: EdgeInsets.zero,
-                                  onSelected: (value) => _updateOrderStatus(order.id, value),
-                                  itemBuilder: (context) => OrderStatusExtension.all
-                                      .map(
+                                  popUpAnimationStyle: AnimationStyle(
+                                    curve: Curves.easeOutCubic,
+                                    reverseCurve: Curves.easeInCubic,
+                                    duration: const Duration(milliseconds: 280),
+                                    reverseDuration:
+                                        const Duration(milliseconds: 220),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(
+                                      color: AppTheme.outlineVariant
+                                          .withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  color: AppTheme.surfaceContainerLowest,
+                                  elevation: 12,
+                                  shadowColor:
+                                      Colors.black.withValues(alpha: 0.12),
+                                  onSelected: (value) {
+                                    if (value == _cancelAndNotifyValue) {
+                                      _cancelOrderAndNotifySuppliers(order.id);
+                                      return;
+                                    }
+                                    _updateOrderStatus(order.id, value);
+                                  },
+                                  itemBuilder: (context) {
+                                    final entries = <PopupMenuEntry<String>>[
+                                      ...OrderStatusExtension.all.map(
                                         (s) => PopupMenuItem<String>(
+                                          padding: EdgeInsets.zero,
                                           value: s.dbValue,
+                                          child: Container(
+                                            margin: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: order.status == s
+                                                  ? orderStatusColor(s)
+                                                      .withValues(alpha: 0.12)
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                dropdownMenuEntryStatusDot(s),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    orderStatusLocalizedLabel(
+                                                        s, l10n),
+                                                    style: GoogleFonts.assistant(
+                                                      fontWeight:
+                                                          order.status == s
+                                                              ? FontWeight.w800
+                                                              : FontWeight.w500,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (order.status == s)
+                                                  Icon(
+                                                    Icons.check_rounded,
+                                                    size: 18,
+                                                    color: AppTheme.secondary,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ];
+
+                                    if (order.status == OrderStatus.sentToSupplier) {
+                                      entries.add(const PopupMenuDivider(height: 10));
+                                      entries.add(
+                                        PopupMenuItem<String>(
+                                          value: _cancelAndNotifyValue,
                                           child: Row(
                                             children: [
-                                              if (order.status == s)
-                                                const Icon(Icons.check_rounded,
-                                                    size: 18, color: AppTheme.secondary),
-                                              if (order.status == s)
-                                                const SizedBox(width: 8),
-                                              Text(
-                                                _statusLabel(s, l10n),
-                                                style: GoogleFonts.assistant(),
+                                              const Icon(
+                                                Icons.cancel_rounded,
+                                                size: 18,
+                                                color: AppTheme.error,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  _t(
+                                                    l10n,
+                                                    'cancelAndNotifySupplier',
+                                                    'Cancel & notify supplier',
+                                                  ),
+                                                  style: GoogleFonts.assistant(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppTheme.error,
+                                                  ),
+                                                ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                      )
-                                      .toList(),
+                                      );
+                                    }
+
+                                    return entries;
+                                  },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
@@ -402,7 +784,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Text(
-                                                _statusLabel(order.status, l10n),
+                                                orderStatusLocalizedLabel(
+                                                    order.status, l10n),
                                                 style: GoogleFonts.assistant(
                                                   color: statusColor,
                                                   fontWeight: FontWeight.w700,
@@ -432,11 +815,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                             ],
                           );
                         }).toList(),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                        )),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -511,34 +893,155 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     );
   }
 
-  Widget _buildCreatedByDropdown(List<String> creators, AppLocalizations? l10n) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _createdByFilter,
-          isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, size: 20),
-          style: GoogleFonts.assistant(fontSize: 13, color: AppTheme.onSurface),
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              setState(() => _createdByFilter = newValue);
-            }
-          },
-          items: creators.map<DropdownMenuItem<String>>((String f) {
-            final label = f == 'All' ? (l10n?.tr('all') ?? 'הכל') : f;
-            return DropdownMenuItem<String>(
-              value: f,
-              child: Text(label, overflow: TextOverflow.ellipsis),
-            );
-          }).toList(),
+  Widget _buildCardNameFilterDropdown(
+    List<Customer> customers,
+    Customer? selected,
+    AppLocalizations? l10n,
+  ) {
+    final sorted = [...customers]
+      ..sort(
+        (a, b) => a.cardName.toLowerCase().compareTo(b.cardName.toLowerCase()),
+      );
+
+    return DropdownMenu<String>(
+      key: ValueKey('card_filter_${selected?.id ?? 'all'}'),
+      initialSelection: selected?.id ?? '',
+      width: 280,
+      enableFilter: true,
+      requestFocusOnTap: true,
+      leadingIcon: dropdownLeadingSlot(
+        Icon(
+          selected == null ? Icons.badge_outlined : Icons.badge_rounded,
+          size: 18,
+          color: AppTheme.secondary,
         ),
       ),
+      label: Text(
+        l10n?.tr('cardName') ?? 'שם כרטיס',
+        style: GoogleFonts.assistant(
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
+      ),
+      menuStyle: appDropdownMenuStyle(),
+      inputDecorationTheme:
+          appDropdownInputDecorationTheme().copyWith(fillColor: Colors.white),
+      textStyle: GoogleFonts.assistant(
+        color: AppTheme.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
+      trailingIcon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: AppTheme.secondary,
+      ),
+      selectedTrailingIcon: Icon(
+        Icons.keyboard_arrow_up_rounded,
+        color: AppTheme.secondary,
+      ),
+      onSelected: (id) {
+        if (id == null) return;
+        if (id.isEmpty) {
+          ref.read(ordersCustomerFilterProvider.notifier).setFilter(null);
+        } else {
+          final match = sorted.where((c) => c.id == id);
+          if (match.isEmpty) return;
+          ref.read(ordersCustomerFilterProvider.notifier).setFilter(match.first);
+        }
+        setState(() => _currentPage = 1);
+      },
+      dropdownMenuEntries: [
+        DropdownMenuEntry<String>(
+          value: '',
+          label: l10n?.tr('all') ?? 'All',
+          leadingIcon: dropdownLeadingSlot(
+            Icon(
+              Icons.groups_outlined,
+              size: 16,
+              color: AppTheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        ...sorted.map(
+          (c) => DropdownMenuEntry<String>(
+            value: c.id,
+            label: '${c.cardName} — ${c.customerName}',
+            leadingIcon: dropdownLeadingSlot(
+              Icon(
+                Icons.badge_outlined,
+                size: 16,
+                color: AppTheme.secondary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCreatedByDropdown(List<String> creators, AppLocalizations? l10n) {
+    final createdByLeading = dropdownLeadingSlot(
+      Icon(
+        _createdByFilter == 'All'
+            ? Icons.people_outline_rounded
+            : Icons.person_rounded,
+        size: 18,
+        color: AppTheme.secondary,
+      ),
+    );
+    return DropdownMenu<String>(
+      key: ValueKey('creator_${_createdByFilter}_${creators.length}'),
+      initialSelection: _createdByFilter,
+      width: 220,
+      selectOnly: true,
+      enableFilter: false,
+      enableSearch: false,
+      leadingIcon: createdByLeading,
+      decorationBuilder: animatedDropdownDecorationBuilder(
+        label: Text(
+          l10n?.tr('createdBy') ?? 'Created by',
+          style: GoogleFonts.assistant(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+        leadingIcon: createdByLeading,
+      ),
+      menuStyle: appDropdownMenuStyle(),
+      inputDecorationTheme:
+          appDropdownInputDecorationTheme().copyWith(fillColor: Colors.white),
+      textStyle: GoogleFonts.assistant(
+        color: AppTheme.onSurface,
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+      ),
+      onSelected: (v) {
+        if (v != null) {
+          setState(() {
+            _createdByFilter = v;
+            _currentPage = 1;
+          });
+        }
+      },
+      dropdownMenuEntries: creators.map((f) {
+        final label = f == 'All' ? (l10n?.tr('all') ?? 'All') : f;
+        return DropdownMenuEntry<String>(
+          value: f,
+          label: label,
+          leadingIcon: dropdownLeadingSlot(
+            f == 'All'
+                ? Icon(
+                    Icons.groups_outlined,
+                    size: 16,
+                    color: AppTheme.onSurfaceVariant,
+                  )
+                : Icon(
+                    Icons.person_outline_rounded,
+                    size: 18,
+                    color: AppTheme.secondary,
+                  ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -547,85 +1050,77 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       'All',
       ...OrderStatusExtension.all.map((s) => s.dbValue),
     ];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _statusFilter,
-          isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, size: 20),
-          style: GoogleFonts.assistant(fontSize: 13, color: AppTheme.onSurface),
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              setState(() => _statusFilter = newValue);
-            }
-          },
-          items: filters.map<DropdownMenuItem<String>>((String f) {
-            final label = f == 'All'
-                ? (l10n?.tr('all') ?? 'הכל')
-                : _statusLabel(OrderStatusExtension.fromString(f), l10n);
-            return DropdownMenuItem<String>(
-              value: f,
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
+    final statusLeading = leadingIconForStatusFilterValue(_statusFilter);
+    return DropdownMenu<String>(
+      key: ValueKey('ord_stat_$_statusFilter'),
+      initialSelection: _statusFilter,
+      width: 240,
+      selectOnly: true,
+      enableFilter: false,
+      enableSearch: false,
+      leadingIcon: statusLeading,
+      decorationBuilder: animatedDropdownDecorationBuilder(
+        label: Text(
+          l10n?.tr('status') ?? 'Status',
+          style: GoogleFonts.assistant(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
         ),
+        leadingIcon: statusLeading,
       ),
+      menuStyle: appDropdownMenuStyle(),
+      inputDecorationTheme:
+          appDropdownInputDecorationTheme().copyWith(fillColor: Colors.white),
+      textStyle: GoogleFonts.assistant(
+        color: AppTheme.onSurface,
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+      ),
+      onSelected: (v) {
+        if (v != null) {
+          setState(() {
+            _statusFilter = v;
+            _currentPage = 1;
+          });
+        }
+      },
+      dropdownMenuEntries: filters.map((f) {
+        final label = f == 'All'
+            ? (l10n?.tr('all') ?? 'All')
+            : orderStatusLocalizedLabel(
+                OrderStatusExtension.fromString(f),
+                l10n,
+              );
+        return DropdownMenuEntry<String>(
+          value: f,
+          label: label,
+          leadingIcon: leadingIconForStatusFilterValue(f),
+        );
+      }).toList(),
     );
-  }
-
-  Color _statusColor(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.active:
-        return AppTheme.success;
-      case OrderStatus.preparing:
-        return const Color(0xFF2196F3);
-      case OrderStatus.inAssembly:
-        return AppTheme.warning;
-      case OrderStatus.awaitingShipping:
-        return AppTheme.secondaryContainer;
-      case OrderStatus.handled:
-        return AppTheme.secondary;
-      case OrderStatus.delivered:
-        return AppTheme.success;
-      case OrderStatus.canceled:
-        return AppTheme.error;
-    }
-  }
-
-  String _statusLabel(OrderStatus status, AppLocalizations? l10n) {
-    switch (status) {
-      case OrderStatus.active:
-        return l10n?.tr('active') ?? 'Active';
-      case OrderStatus.preparing:
-        return l10n?.tr('preparing') ?? 'Preparing';
-      case OrderStatus.inAssembly:
-        return l10n?.tr('inAssembly') ?? 'In Assembly';
-      case OrderStatus.awaitingShipping:
-        return l10n?.tr('awaitingShipping') ?? 'Awaiting Shipping';
-      case OrderStatus.handled:
-        return l10n?.tr('handled') ?? 'Handled';
-      case OrderStatus.delivered:
-        return l10n?.tr('delivered') ?? 'Delivered';
-      case OrderStatus.canceled:
-        return l10n?.tr('canceled') ?? 'Canceled';
-    }
   }
 
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {
     setState(() => _updatingOrderId = orderId);
     try {
       final username = ref.read(currentUsernameProvider);
-      await ref.read(orderServiceProvider).updateStatus(orderId, newStatus, username);
+      await ref
+          .read(orderServiceProvider)
+          .updateStatus(orderId, newStatus, username);
+
+      // If delivery begins or status becomes Delivered, start warranty counting.
+      await ref.read(orderServiceProvider).startWarrantyIfEligible(
+            orderId,
+            username,
+          );
       ref.invalidate(ordersProvider);
+      ref.invalidate(customersProvider);
+      ref.invalidate(totalUnpaidDebtsProvider);
+      final fc = ref.read(ordersCustomerFilterProvider);
+      if (fc != null) {
+        ref.invalidate(customerOrdersProvider(fc.id));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

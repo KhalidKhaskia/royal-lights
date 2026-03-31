@@ -72,6 +72,8 @@ flutter:
     - lib/l10n/app_he.arb
     - lib/l10n/app_ar.arb
     - lib/l10n/app_en.arb
+    - assets/branding/logo.png
+    - assets/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -3,6 +3,7 @@ import 'order_item.dart';
 enum OrderStatus {
   active,
   preparing,
+  sentToSupplier,
   inAssembly,
   awaitingShipping,
   handled,
@@ -17,6 +18,8 @@ extension OrderStatusExtension on OrderStatus {
         return 'Active';
       case OrderStatus.preparing:
         return 'Preparing';
+      case OrderStatus.sentToSupplier:
+        return 'Sent to Supplier';
       case OrderStatus.inAssembly:
         return 'In Assembly';
       case OrderStatus.awaitingShipping:
@@ -36,6 +39,8 @@ extension OrderStatusExtension on OrderStatus {
         return OrderStatus.active;
       case 'Preparing':
         return OrderStatus.preparing;
+      case 'Sent to Supplier':
+        return OrderStatus.sentToSupplier;
       case 'In Assembly':
         return OrderStatus.inAssembly;
       case 'Awaiting Shipping':
@@ -55,6 +60,7 @@ extension OrderStatusExtension on OrderStatus {
   static List<OrderStatus> get all => [
         OrderStatus.active,
         OrderStatus.preparing,
+        OrderStatus.sentToSupplier,
         OrderStatus.inAssembly,
         OrderStatus.awaitingShipping,
         OrderStatus.handled,
@@ -69,6 +75,9 @@ class Order {
   final int? orderNumber;
   final bool assemblyRequired;
   final DateTime? assemblyDate;
+  final DateTime? deliveryDate;
+  /// One-time installation / assembly fee (ILS), admin-entered.
+  final double assemblyPrice;
   final OrderStatus status;
   final double totalPrice;
   final String? notes;
@@ -88,6 +97,8 @@ class Order {
     this.orderNumber,
     this.assemblyRequired = false,
     this.assemblyDate,
+    this.deliveryDate,
+    this.assemblyPrice = 0,
     this.status = OrderStatus.active,
     this.totalPrice = 0,
     this.notes,
@@ -107,8 +118,12 @@ class Order {
       orderNumber: json['order_number'] as int?,
       assemblyRequired: json['assembly_required'] as bool? ?? false,
       assemblyDate: json['assembly_date'] != null
-          ? DateTime.parse(json['assembly_date'])
+          ? DateTime.parse(json['assembly_date'] as String)
           : null,
+      deliveryDate: json['delivery_date'] != null
+          ? DateTime.parse(json['delivery_date'] as String)
+          : null,
+      assemblyPrice: (json['assembly_price'] as num?)?.toDouble() ?? 0,
       status: OrderStatusExtension.fromString(
         json['status'] as String? ?? 'Active',
       ),
@@ -141,6 +156,8 @@ class Order {
       'customer_id': customerId,
       'assembly_required': assemblyRequired,
       'assembly_date': assemblyDate?.toIso8601String().split('T').first,
+      'delivery_date': deliveryDate?.toIso8601String().split('T').first,
+      'assembly_price': assemblyPrice,
       'status': status.dbValue,
       'total_price': totalPrice,
       'notes': notes,
@@ -155,6 +172,8 @@ class Order {
     int? orderNumber,
     bool? assemblyRequired,
     DateTime? assemblyDate,
+    DateTime? deliveryDate,
+    double? assemblyPrice,
     OrderStatus? status,
     double? totalPrice,
     String? notes,
@@ -170,6 +189,8 @@ class Order {
       orderNumber: orderNumber ?? this.orderNumber,
       assemblyRequired: assemblyRequired ?? this.assemblyRequired,
       assemblyDate: assemblyDate ?? this.assemblyDate,
+      deliveryDate: deliveryDate ?? this.deliveryDate,
+      assemblyPrice: assemblyPrice ?? this.assemblyPrice,
       status: status ?? this.status,
       totalPrice: totalPrice ?? this.totalPrice,
       notes: notes ?? this.notes,

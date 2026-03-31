@@ -5,6 +5,8 @@ import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/order.dart';
 import '../../providers/providers.dart';
+import '../../theme/order_status_colors.dart';
+import '../../widgets/editorial_screen_title.dart';
 
 class AssembliesScreen extends ConsumerWidget {
   const AssembliesScreen({super.key});
@@ -25,39 +27,8 @@ class AssembliesScreen extends ConsumerWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Editorial Header
-          Padding(
-            padding: const EdgeInsets.only(left: 32, right: 32, top: 48, bottom: 24),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n?.tr('assemblies') ?? 'Workshops',
-                      style: GoogleFonts.assistant(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        color: AppTheme.onSurface,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 4,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: AppTheme.secondary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-              ],
-            ),
+          EditorialScreenTitle(
+            title: l10n?.tr('assemblies') ?? 'Workshops',
           ),
 
           Expanded(
@@ -123,35 +94,11 @@ class _AssemblyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color statusColor;
-    switch (order.status) {
-      case OrderStatus.active:
-        statusColor = AppTheme.success;
-        break;
-      case OrderStatus.preparing:
-        statusColor = const Color(0xFF2196F3);
-        break;
-      case OrderStatus.inAssembly:
-        statusColor = AppTheme.warning;
-        break;
-      case OrderStatus.awaitingShipping:
-        statusColor = const Color(0xFF9C27B0);
-        break;
-      case OrderStatus.handled:
-        statusColor = AppTheme.secondary;
-        break;
-      case OrderStatus.delivered:
-        statusColor = AppTheme.success;
-        break;
-      case OrderStatus.canceled:
-        statusColor = AppTheme.error;
-        break;
-    }
+    final statusColor = orderStatusColor(order.status);
+    final statusLabel = orderStatusLocalizedLabel(order.status, l10n);
 
     // Calculate days until assembly
-    final daysUntil = order.assemblyDate != null
-        ? order.assemblyDate!.difference(DateTime.now()).inDays
-        : null;
+    final daysUntil = order.assemblyDate?.difference(DateTime.now()).inDays;
     final isUrgent = daysUntil != null && daysUntil <= 2;
 
     return Container(
@@ -197,92 +144,108 @@ class _AssemblyCard extends StatelessWidget {
             ),
             child: Icon(Icons.build_rounded, color: statusColor, size: 28),
           ),
-          title: Row(
-            children: [
-              Text(
-                '#${order.orderNumber ?? '-'}',
-                style: GoogleFonts.assistant(
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.secondary,
-                  fontSize: 18,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                '${order.cardName ?? ''} - ${order.customerName ?? ''}',
-                style: GoogleFonts.assistant(
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.onSurface,
-                  fontSize: 16,
-                ),
-              ),
-              const Spacer(),
-              // Assembly date
-              if (order.assemblyDate != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isUrgent
-                        ? AppTheme.error.withValues(alpha: 0.1)
-                        : AppTheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 16,
-                        color: isUrgent ? AppTheme.error : AppTheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        order.assemblyDate!.toString().split(' ').first,
-                        style: GoogleFonts.assistant(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: isUrgent
-                              ? AppTheme.error
-                              : AppTheme.onSurfaceVariant,
-                        ),
-                      ),
-                      if (daysUntil != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '(${daysUntil}d)',
-                          style: GoogleFonts.assistant(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isUrgent
-                                ? AppTheme.error
-                                : AppTheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              const SizedBox(width: 16),
-              // Status badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  order.status.dbValue,
+            title: Row(
+              children: [
+                Text(
+                  '#${order.orderNumber ?? '-'}',
                   style: GoogleFonts.assistant(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.secondary,
+                    fontSize: 18,
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    '${order.cardName ?? ''} - ${order.customerName ?? ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.assistant(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.onSurface,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Keep badges compact and non-overflowing
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (order.assemblyDate != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isUrgent
+                              ? AppTheme.error.withValues(alpha: 0.1)
+                              : AppTheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              size: 16,
+                              color: isUrgent
+                                  ? AppTheme.error
+                                  : AppTheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              order.assemblyDate!.toString().split(' ').first,
+                              style: GoogleFonts.assistant(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: isUrgent
+                                    ? AppTheme.error
+                                    : AppTheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (daysUntil != null) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '(${daysUntil}d)',
+                                style: GoogleFonts.assistant(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isUrgent
+                                      ? AppTheme.error
+                                      : AppTheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: GoogleFonts.assistant(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           children: [
             // Items list with opacity logic
             if (order.items.isNotEmpty) ...[
@@ -324,6 +287,8 @@ class _AssemblyCard extends StatelessWidget {
                           flex: 2,
                           child: Text(
                             item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.assistant(
                               fontWeight: isAssembly
                                   ? FontWeight.w700
@@ -333,22 +298,22 @@ class _AssemblyCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        SizedBox(
-                          width: 120,
-                          child: Text(
-                            '${l10n?.tr('quantity') ?? 'Qty'}: ${item.quantity}',
-                            style: GoogleFonts.assistant(
-                              color: AppTheme.onSurfaceVariant,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '${l10n?.tr('quantity') ?? 'Qty'}: ${item.quantity}',
+                          style: GoogleFonts.assistant(
+                            color: AppTheme.onSurfaceVariant,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         if (item.roomName != null)
-                          SizedBox(
-                            width: 120,
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 14),
                             child: Text(
                               item.roomName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.assistant(
                                 color: AppTheme.onSurfaceVariant,
                                 fontSize: 15,
@@ -378,9 +343,16 @@ class _AssemblyCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 if (order.status == OrderStatus.active)
                   ElevatedButton.icon(
-                    onPressed: () => _changeStatus(context, order, 'In Assembly'),
+                    onPressed: () => _changeStatus(
+                      context,
+                      order,
+                      OrderStatus.inAssembly.dbValue,
+                    ),
                     icon: const Icon(Icons.build, size: 18),
-                    label: Text(l10n?.tr('inAssembly') ?? 'In Assembly', style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
+                    label: Text(
+                      orderStatusLocalizedLabel(OrderStatus.inAssembly, l10n),
+                      style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.warning,
                       foregroundColor: Colors.white,
@@ -391,9 +363,16 @@ class _AssemblyCard extends StatelessWidget {
                   ),
                 if (order.status == OrderStatus.inAssembly)
                   ElevatedButton.icon(
-                    onPressed: () => _changeStatus(context, order, 'Handled'),
+                    onPressed: () => _changeStatus(
+                      context,
+                      order,
+                      OrderStatus.handled.dbValue,
+                    ),
                     icon: const Icon(Icons.check_circle, size: 18),
-                    label: Text(l10n?.tr('handled') ?? 'Handled', style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
+                    label: Text(
+                      orderStatusLocalizedLabel(OrderStatus.handled, l10n),
+                      style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,

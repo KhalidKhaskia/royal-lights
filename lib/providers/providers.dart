@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/customer_service.dart';
+import '../services/fixing_service.dart';
 import '../services/order_service.dart';
 import '../services/payment_service.dart';
 import '../services/supplier_service.dart';
 import '../services/room_service.dart';
 import '../models/customer.dart';
+import '../models/fixing_ticket.dart';
 import '../models/order.dart';
 import '../models/payment.dart';
 import '../models/supplier.dart';
@@ -64,6 +66,10 @@ final supplierServiceProvider = Provider<SupplierService>((ref) {
 
 final roomServiceProvider = Provider<RoomService>((ref) {
   return RoomService(ref.watch(supabaseClientProvider));
+});
+
+final fixingServiceProvider = Provider<FixingService>((ref) {
+  return FixingService(ref.watch(supabaseClientProvider));
 });
 
 // ─── DATA PROVIDERS (AsyncNotifier pattern) ───
@@ -137,6 +143,13 @@ final customerPaymentsProvider = FutureProvider.family
       return service.getByCustomer(customerId);
     });
 
+// Fixing tickets (open / pending only)
+final fixingTicketsProvider = FutureProvider<List<FixingTicket>>((ref) async {
+  final service = ref.watch(fixingServiceProvider);
+  // Ensure UI never spins forever if network/migrations hang.
+  return service.getOpenTickets().timeout(const Duration(seconds: 10));
+});
+
 // Dashboard stats
 final openOrdersCountProvider = FutureProvider.autoDispose<int>((ref) async {
   final service = ref.watch(orderServiceProvider);
@@ -166,4 +179,30 @@ class NavIndexNotifier extends Notifier<int> {
 
 final selectedNavIndexProvider = NotifierProvider<NavIndexNotifier, int>(
   NavIndexNotifier.new,
+);
+
+/// When non-null, [PaymentsScreen] lists only this customer's payments (all entries).
+class PaymentsCustomerFilterNotifier extends Notifier<Customer?> {
+  @override
+  Customer? build() => null;
+
+  void setFilter(Customer? customer) => state = customer;
+}
+
+final paymentsCustomerFilterProvider =
+    NotifierProvider<PaymentsCustomerFilterNotifier, Customer?>(
+  PaymentsCustomerFilterNotifier.new,
+);
+
+/// When non-null, [OrdersScreen] lists only this customer's orders (same idea as [paymentsCustomerFilterProvider]).
+class OrdersCustomerFilterNotifier extends Notifier<Customer?> {
+  @override
+  Customer? build() => null;
+
+  void setFilter(Customer? customer) => state = customer;
+}
+
+final ordersCustomerFilterProvider =
+    NotifierProvider<OrdersCustomerFilterNotifier, Customer?>(
+  OrdersCustomerFilterNotifier.new,
 );
