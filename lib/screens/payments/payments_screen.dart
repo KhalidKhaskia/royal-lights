@@ -13,6 +13,7 @@ import '../../models/payment.dart';
 import '../../models/customer.dart';
 import '../../providers/providers.dart';
 import '../../widgets/app_dropdown_styles.dart';
+import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/editorial_screen_title.dart';
 
 String _localizedPaymentType(AppLocalizations? l10n, PaymentType t) {
@@ -42,6 +43,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   String _customerFilterId = '';
   DateTime? _dateFrom;
   DateTime? _dateTo;
+
   /// `all` | `cash` | `credit` | `check`
   String _typeFilterKey = 'all';
 
@@ -81,8 +83,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     }
 
     if (_dateFrom != null) {
-      final from =
-          DateTime(_dateFrom!.year, _dateFrom!.month, _dateFrom!.day);
+      final from = DateTime(_dateFrom!.year, _dateFrom!.month, _dateFrom!.day);
       it = it.where((p) {
         final d = DateTime(p.date.year, p.date.month, p.date.day);
         return !d.isBefore(from);
@@ -282,7 +283,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                               GoogleFonts.assistant(color: AppTheme.onSurface),
                           decoration: InputDecoration(
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
-                            floatingLabelAlignment: FloatingLabelAlignment.start,
+                            floatingLabelAlignment:
+                                FloatingLabelAlignment.start,
                             labelText: l10n?.tr('searchPaymentsHint') ??
                                 'Search payments…',
                             labelStyle: GoogleFonts.assistant(
@@ -360,11 +362,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Theme(
-                    data: Theme.of(context).copyWith(
-                      inputDecorationTheme:
-                          paymentsFilterInputDecorationTheme(),
-                    ),
-                    child: Wrap(
+                  data: Theme.of(context).copyWith(
+                    inputDecorationTheme: paymentsFilterInputDecorationTheme(),
+                  ),
+                  child: Wrap(
                     spacing: 14,
                     runSpacing: 16,
                     crossAxisAlignment: WrapCrossAlignment.center,
@@ -456,8 +457,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                             side: BorderSide(
-                              color:
-                                  AppTheme.outlineVariant.withValues(alpha: 0.35),
+                              color: AppTheme.outlineVariant
+                                  .withValues(alpha: 0.35),
                             ),
                           ),
                         ),
@@ -488,8 +489,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                             side: BorderSide(
-                              color:
-                                  AppTheme.outlineVariant.withValues(alpha: 0.35),
+                              color: AppTheme.outlineVariant
+                                  .withValues(alpha: 0.35),
                             ),
                           ),
                         ),
@@ -631,8 +632,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
             child: paymentsAsync.when(
               data: (payments) {
                 final scoped = filterCustomer != null;
-                final filtered =
-                    _filterPayments(payments, scoped, l10n);
+                final filtered = _filterPayments(payments, scoped, l10n);
 
                 if (payments.isEmpty) {
                   return Center(
@@ -642,7 +642,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                         Icon(
                           Icons.payment_outlined,
                           size: 80,
-                          color: AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
+                          color:
+                              AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -665,7 +666,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                         Icon(
                           Icons.search_off_rounded,
                           size: 80,
-                          color: AppTheme.onSurfaceVariant.withValues(alpha: 0.35),
+                          color:
+                              AppTheme.onSurfaceVariant.withValues(alpha: 0.35),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -704,7 +706,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                       borderRadius: BorderRadius.circular(24),
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
-                          AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          AppTheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
                         ),
                         headingRowHeight: 64,
                         dataRowMinHeight: 64,
@@ -714,8 +717,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                         columns: [
                           _buildColumnHeader(l10n?.tr('date') ?? 'Date'),
                           _buildColumnHeader(l10n?.tr('type') ?? 'Type'),
-                          _buildColumnHeader(l10n?.tr('cardName') ?? 'Card Name'),
-                          _buildColumnHeader(l10n?.tr('customerName') ?? 'Customer'),
+                          _buildColumnHeader(
+                              l10n?.tr('cardName') ?? 'Card Name'),
+                          _buildColumnHeader(
+                              l10n?.tr('customerName') ?? 'Customer'),
                           _buildColumnHeader(l10n?.tr('amount') ?? 'Amount'),
                           _buildColumnHeader(l10n?.tr('image') ?? 'Receipt'),
                           _buildColumnHeader(l10n?.tr('notes') ?? 'Notes'),
@@ -752,7 +757,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                               ),
                               DataCell(
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: typeColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
@@ -760,7 +766,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(typeIcon, size: 16, color: typeColor),
+                                      Icon(typeIcon,
+                                          size: 16, color: typeColor),
                                       const SizedBox(width: 8),
                                       Text(
                                         _localizedPaymentType(
@@ -813,13 +820,15 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                               DataCell(
                                 Text(
                                   payment.notes ?? '-',
-                                  style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant),
+                                  style: GoogleFonts.assistant(
+                                      color: AppTheme.onSurfaceVariant),
                                 ),
                               ),
                               DataCell(
                                 Text(
                                   payment.createdBy ?? '-',
-                                  style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant),
+                                  style: GoogleFonts.assistant(
+                                      color: AppTheme.onSurfaceVariant),
                                 ),
                               ),
                             ],
@@ -830,7 +839,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                   ),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const AppLoadingOverlay(
+                isLoading: true,
+                child: SizedBox.expand(),
+              ),
               error: (e, _) => Center(
                 child: Text(
                   'Error: $e',
@@ -941,24 +953,25 @@ void showPaymentDialog(
   var isSaving = false;
 
   showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          Future<void> pickReceipt(ImageSource source) async {
-            final picker = ImagePicker();
-            final xFile = await picker.pickImage(
-              source: source,
-              maxWidth: 1600,
-              maxHeight: 1600,
-              imageQuality: 88,
-            );
-            if (xFile == null) return;
-            final bytes = await xFile.readAsBytes();
-            setDialogState(() => receiptImageBytes = bytes);
-          }
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) {
+        Future<void> pickReceipt(ImageSource source) async {
+          final picker = ImagePicker();
+          final xFile = await picker.pickImage(
+            source: source,
+            maxWidth: 1600,
+            maxHeight: 1600,
+            imageQuality: 88,
+          );
+          if (xFile == null) return;
+          final bytes = await xFile.readAsBytes();
+          setDialogState(() => receiptImageBytes = bytes);
+        }
 
-          return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           backgroundColor: AppTheme.surfaceContainerLowest,
           elevation: 8,
           child: Container(
@@ -1017,8 +1030,7 @@ void showPaymentDialog(
                       ),
                       onSelected: initialCustomer != null
                           ? null
-                          : (c) =>
-                              setDialogState(() => selectedCustomer = c),
+                          : (c) => setDialogState(() => selectedCustomer = c),
                       dropdownMenuEntries: customers
                           .map(
                             (c) => DropdownMenuEntry<Customer>(
@@ -1091,25 +1103,30 @@ void showPaymentDialog(
                       floatingLabelBehavior: FloatingLabelBehavior.auto,
                       floatingLabelAlignment: FloatingLabelAlignment.start,
                       labelText: l10n?.tr('amount') ?? 'Amount',
-                      labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
+                      labelStyle:
+                          const TextStyle(color: AppTheme.onSurfaceVariant),
                       floatingLabelStyle: const TextStyle(
                         color: AppTheme.secondary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
-                      prefixIcon: const Icon(Icons.attach_money, color: AppTheme.onSurfaceVariant),
+                      prefixIcon: const Icon(Icons.attach_money,
+                          color: AppTheme.onSurfaceVariant),
                       filled: true,
-                      fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      fillColor: AppTheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                          color:
+                              AppTheme.outlineVariant.withValues(alpha: 0.35),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                          color:
+                              AppTheme.outlineVariant.withValues(alpha: 0.35),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -1142,7 +1159,8 @@ void showPaymentDialog(
                             horizontal: 18,
                           ),
                           side: BorderSide(
-                            color: AppTheme.outlineVariant.withValues(alpha: 0.5),
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.5),
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1162,7 +1180,8 @@ void showPaymentDialog(
                             horizontal: 18,
                           ),
                           side: BorderSide(
-                            color: AppTheme.outlineVariant.withValues(alpha: 0.5),
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.5),
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1172,15 +1191,18 @@ void showPaymentDialog(
                         onPressed: isSaving
                             ? null
                             : () => pickReceipt(ImageSource.gallery),
-                        icon: const Icon(Icons.photo_library_outlined, size: 20),
+                        icon:
+                            const Icon(Icons.photo_library_outlined, size: 20),
                         label: Text(l10n?.tr('chooseFromGallery') ?? 'Gallery'),
                       ),
                       if (receiptImageBytes != null)
                         TextButton.icon(
                           onPressed: isSaving
                               ? null
-                              : () => setDialogState(() => receiptImageBytes = null),
-                          icon: Icon(Icons.close_rounded, color: AppTheme.error.withValues(alpha: 0.9)),
+                              : () => setDialogState(
+                                  () => receiptImageBytes = null),
+                          icon: Icon(Icons.close_rounded,
+                              color: AppTheme.error.withValues(alpha: 0.9)),
                           label: Text(
                             l10n?.tr('delete') ?? 'Remove',
                             style: GoogleFonts.assistant(
@@ -1216,24 +1238,28 @@ void showPaymentDialog(
                       floatingLabelBehavior: FloatingLabelBehavior.auto,
                       floatingLabelAlignment: FloatingLabelAlignment.start,
                       labelText: l10n?.tr('notes') ?? 'Notes',
-                      labelStyle: const TextStyle(color: AppTheme.onSurfaceVariant),
+                      labelStyle:
+                          const TextStyle(color: AppTheme.onSurfaceVariant),
                       floatingLabelStyle: const TextStyle(
                         color: AppTheme.secondary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
                       filled: true,
-                      fillColor: AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      fillColor: AppTheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                          color:
+                              AppTheme.outlineVariant.withValues(alpha: 0.35),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                          color:
+                              AppTheme.outlineVariant.withValues(alpha: 0.35),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -1253,9 +1279,12 @@ void showPaymentDialog(
                         onPressed: () => Navigator.pop(ctx),
                         style: TextButton.styleFrom(
                           foregroundColor: AppTheme.onSurfaceVariant,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
                         ),
-                        child: Text(l10n?.tr('cancel') ?? 'Cancel', style: GoogleFonts.assistant(fontWeight: FontWeight.w600)),
+                        child: Text(l10n?.tr('cancel') ?? 'Cancel',
+                            style: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -1274,8 +1303,8 @@ void showPaymentDialog(
                                     cardName: selectedCustomer!.cardName,
                                     customerName:
                                         selectedCustomer!.customerName,
-                                    amount: double.tryParse(amountCtrl.text) ??
-                                        0,
+                                    amount:
+                                        double.tryParse(amountCtrl.text) ?? 0,
                                     notes: notesCtrl.text.trim().isEmpty
                                         ? null
                                         : notesCtrl.text.trim(),
@@ -1364,7 +1393,7 @@ void showPaymentDialog(
             ),
           ),
         );
-        },
-      ),
-    );
+      },
+    ),
+  );
 }

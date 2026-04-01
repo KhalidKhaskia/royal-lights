@@ -12,14 +12,25 @@ import '../screens/assemblies/assemblies_screen.dart';
 import '../screens/suppliers/suppliers_screen.dart';
 import '../screens/fixing/fixing_screen.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  int? _prevIndex;
+  bool _sidebarCollapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final selectedIndex = ref.watch(selectedNavIndexProvider);
     final locale = ref.watch(localeProvider);
     final l10n = AppLocalizations.of(context);
+    final prev = _prevIndex ?? selectedIndex;
+    final movingForward = selectedIndex >= prev;
+    _prevIndex = selectedIndex;
 
     final screens = [
       const DashboardScreen(),
@@ -50,8 +61,10 @@ class AppShell extends ConsumerWidget {
       body: Row(
         children: [
           // Sidebar
-          Container(
-            width: 220,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            width: _sidebarCollapsed ? 76 : 220,
             decoration: BoxDecoration(
               color: AppTheme.surfaceCard,
               boxShadow: [
@@ -64,40 +77,83 @@ class AppShell extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                // Logo / Brand
+                // Logo / Brand + collapse toggle
                 SizedBox(
                   height: 90,
                   child: Stack(
                     clipBehavior: Clip.none,
-                    children: const [
-                      Positioned.fill(
+                    children: [
+                      const Positioned.fill(
                         child: ColoredBox(color: AppTheme.surfaceCard),
                       ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: -10,
-                        child: Center(
-                          child: BrandLogo(
-                            width: 100,
-                            height: 100,
-                            fit: BoxFit.contain,
+                      PositionedDirectional(
+                        top: 10,
+                        start: _sidebarCollapsed ? 8 : null,
+                        end: _sidebarCollapsed ? null : 10,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: IconButton(
+                            tooltip: _sidebarCollapsed
+                                ? (l10n?.tr('expand') ?? 'Expand')
+                                : (l10n?.tr('collapse') ?? 'Collapse'),
+                            onPressed: () => setState(
+                              () => _sidebarCollapsed = !_sidebarCollapsed,
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: AppTheme.surfaceLight,
+                              foregroundColor: AppTheme.textSecondary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            icon: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              child: Icon(
+                                _sidebarCollapsed
+                                    ? Icons.chevron_right_rounded
+                                    : Icons.chevron_left_rounded,
+                                key: ValueKey(_sidebarCollapsed),
+                              ),
+                            ),
                           ),
                         ),
                       ),
+                      if (!_sidebarCollapsed)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: -10,
+                          child: Center(
+                            child: BrandLogo(
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 // Navigation items
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _sidebarCollapsed ? 6 : 8,
                       vertical: 0,
                     ),
                     itemCount: navItems.length,
                     itemBuilder: (context, index) {
                       final isSelected = selectedIndex == index;
+                      final iconColor = isSelected
+                          ? AppTheme.primaryGold
+                          : AppTheme.textSecondary;
+                      final labelStyle = TextStyle(
+                        color: iconColor,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w400,
+                        fontSize: 15,
+                      );
+
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Material(
@@ -112,8 +168,8 @@ class AppShell extends ConsumerWidget {
                             },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: _sidebarCollapsed ? 10 : 16,
                                 vertical: 14,
                               ),
                               decoration: BoxDecoration(
@@ -133,27 +189,34 @@ class AppShell extends ConsumerWidget {
                                     : null,
                               ),
                               child: Row(
+                                mainAxisAlignment: _sidebarCollapsed
+                                    ? MainAxisAlignment.center
+                                    : MainAxisAlignment.start,
                                 children: [
                                   Icon(
                                     navItems[index].icon,
-                                    color: isSelected
-                                        ? AppTheme.primaryGold
-                                        : AppTheme.textSecondary,
+                                    color: iconColor,
                                     size: 24,
                                   ),
-                                  const SizedBox(width: 14),
-                                  Text(
-                                    navItems[index].label,
-                                    style: TextStyle(
-                                      color: isSelected
-                                          ? AppTheme.primaryGold
-                                          : AppTheme.textSecondary,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w400,
-                                      fontSize: 15,
+                                  if (!_sidebarCollapsed) ...[
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: AnimatedSwitcher(
+                                        duration:
+                                            const Duration(milliseconds: 220),
+                                        switchInCurve: Curves.easeOutCubic,
+                                        switchOutCurve: Curves.easeInCubic,
+                                        child: Text(
+                                          navItems[index].label,
+                                          key: ValueKey(
+                                            'nav_label_${index}_${locale.languageCode}',
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          style: labelStyle,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -164,35 +227,66 @@ class AppShell extends ConsumerWidget {
                   ),
                 ),
                 // Language switcher
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _languageChip('עב', 'he', locale, ref),
-                      _languageChip('عر', 'ar', locale, ref),
-                      _languageChip('EN', 'en', locale, ref),
-                    ],
-                  ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeInOutCubic,
+                  padding: EdgeInsets.all(_sidebarCollapsed ? 8 : 12),
+                  child: _sidebarCollapsed
+                      ? Column(
+                          children: [
+                            _languageChip('עב', 'he', locale, ref),
+                            const SizedBox(height: 8),
+                            _languageChip('عر', 'ar', locale, ref),
+                            const SizedBox(height: 8),
+                            _languageChip('EN', 'en', locale, ref),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _languageChip('עב', 'he', locale, ref),
+                            _languageChip('عر', 'ar', locale, ref),
+                            _languageChip('EN', 'en', locale, ref),
+                          ],
+                        ),
                 ),
                 // Logout
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    _sidebarCollapsed ? 8 : 12,
+                    0,
+                    _sidebarCollapsed ? 8 : 12,
+                    16,
+                  ),
                   child: SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final authService = ref.read(authServiceProvider);
-                        await authService.signOut();
-                      },
-                      icon: const Icon(Icons.logout_rounded, size: 20),
-                      label: Text(l10n?.tr('logout') ?? 'Logout'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.error,
-                        side: const BorderSide(color: AppTheme.error),
-                        minimumSize: const Size(0, 48),
-                      ),
-                    ),
+                    child: _sidebarCollapsed
+                        ? OutlinedButton(
+                            onPressed: () async {
+                              final authService = ref.read(authServiceProvider);
+                              await authService.signOut();
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.error,
+                              side: const BorderSide(color: AppTheme.error),
+                              minimumSize: const Size(0, 48),
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: const Icon(Icons.logout_rounded, size: 20),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: () async {
+                              final authService = ref.read(authServiceProvider);
+                              await authService.signOut();
+                            },
+                            icon: const Icon(Icons.logout_rounded, size: 20),
+                            label: Text(l10n?.tr('logout') ?? 'Logout'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.error,
+                              side: const BorderSide(color: AppTheme.error),
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -205,15 +299,26 @@ class AppShell extends ConsumerWidget {
               switchInCurve: Curves.easeOutQuart,
               switchOutCurve: Curves.easeInQuart,
               transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: Offset(movingForward ? 0.04 : -0.04, 0),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(
+                      parent: animation, curve: Curves.easeOutCubic),
+                );
                 final scale = Tween<double>(begin: 0.98, end: 1.0).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
+                  CurvedAnimation(
+                      parent: animation, curve: Curves.easeOutQuart),
                 );
                 return FadeTransition(
                   opacity: animation,
-                  child: ScaleTransition(
-                    scale: scale,
-                    alignment: Alignment.center,
-                    child: child,
+                  child: SlideTransition(
+                    position: slide,
+                    child: ScaleTransition(
+                      scale: scale,
+                      alignment: Alignment.center,
+                      child: child,
+                    ),
                   ),
                 );
               },

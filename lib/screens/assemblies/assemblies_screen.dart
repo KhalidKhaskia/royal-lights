@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/order.dart';
 import '../../providers/providers.dart';
 import '../../theme/order_status_colors.dart';
+import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/editorial_screen_title.dart';
 
 class AssembliesScreen extends ConsumerWidget {
@@ -30,7 +31,6 @@ class AssembliesScreen extends ConsumerWidget {
           EditorialScreenTitle(
             title: l10n?.tr('assemblies') ?? 'Workshops',
           ),
-
           Expanded(
             child: assembliesAsync.when(
               data: (orders) {
@@ -42,7 +42,8 @@ class AssembliesScreen extends ConsumerWidget {
                         Icon(
                           Icons.build_outlined,
                           size: 80,
-                          color: AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
+                          color:
+                              AppTheme.onSurfaceVariant.withValues(alpha: 0.3),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -58,7 +59,8 @@ class AssembliesScreen extends ConsumerWidget {
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   itemCount: orders.length,
                   itemBuilder: (context, index) {
                     final order = orders[index];
@@ -66,7 +68,10 @@ class AssembliesScreen extends ConsumerWidget {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const AppLoadingOverlay(
+                isLoading: true,
+                child: SizedBox.expand(),
+              ),
               error: (e, _) => Center(
                 child: Text(
                   'Error: $e',
@@ -144,112 +149,115 @@ class _AssemblyCard extends StatelessWidget {
             ),
             child: Icon(Icons.build_rounded, color: statusColor, size: 28),
           ),
-            title: Row(
-              children: [
-                Text(
-                  '#${order.orderNumber ?? '-'}',
+          title: Row(
+            children: [
+              Text(
+                '#${order.orderNumber ?? '-'}',
+                style: GoogleFonts.assistant(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.secondary,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  '${order.cardName ?? ''} - ${order.customerName ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.assistant(
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.secondary,
-                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.onSurface,
+                    fontSize: 16,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    '${order.cardName ?? ''} - ${order.customerName ?? ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.assistant(
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.onSurface,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Keep badges compact and non-overflowing
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (order.assemblyDate != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isUrgent
-                              ? AppTheme.error.withValues(alpha: 0.1)
-                              : AppTheme.surfaceContainerHighest
-                                  .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
-                              size: 16,
+              ),
+              const SizedBox(width: 12),
+              // Keep badges compact and non-overflowing
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (order.assemblyDate != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isUrgent
+                            ? AppTheme.error.withValues(alpha: 0.1)
+                            : AppTheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 16,
+                            color: isUrgent
+                                ? AppTheme.error
+                                : AppTheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            order.assemblyDate!.toString().split(' ').first,
+                            style: GoogleFonts.assistant(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                               color: isUrgent
                                   ? AppTheme.error
                                   : AppTheme.onSurfaceVariant,
                             ),
-                            const SizedBox(width: 8),
+                          ),
+                          if (daysUntil != null) ...[
+                            const SizedBox(width: 6),
                             Text(
-                              order.assemblyDate!.toString().split(' ').first,
+                              '(${daysUntil}d)',
                               style: GoogleFonts.assistant(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                                 color: isUrgent
                                     ? AppTheme.error
                                     : AppTheme.onSurfaceVariant,
                               ),
                             ),
-                            if (daysUntil != null) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                '(${daysUntil}d)',
-                                style: GoogleFonts.assistant(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isUrgent
-                                      ? AppTheme.error
-                                      : AppTheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
                           ],
-                        ),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: GoogleFonts.assistant(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: GoogleFonts.assistant(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           children: [
             // Items list with opacity logic
             if (order.items.isNotEmpty) ...[
-              Divider(color: AppTheme.outlineVariant.withValues(alpha: 0.2), thickness: 1, height: 32),
+              Divider(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.2),
+                  thickness: 1,
+                  height: 32),
               ...order.items.map((item) {
                 final isAssembly = item.assemblyRequired;
                 return Opacity(
@@ -263,7 +271,8 @@ class _AssemblyCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isAssembly
                           ? AppTheme.secondary.withValues(alpha: 0.05)
-                          : AppTheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          : AppTheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
                       border: isAssembly
                           ? Border.all(
@@ -309,7 +318,8 @@ class _AssemblyCard extends StatelessWidget {
                         ),
                         if (item.roomName != null)
                           Padding(
-                            padding: const EdgeInsetsDirectional.only(start: 14),
+                            padding:
+                                const EdgeInsetsDirectional.only(start: 14),
                             child: Text(
                               item.roomName!,
                               maxLines: 1,
@@ -357,8 +367,10 @@ class _AssemblyCard extends StatelessWidget {
                       backgroundColor: AppTheme.warning,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 if (order.status == OrderStatus.inAssembly)
@@ -377,8 +389,10 @@ class _AssemblyCard extends StatelessWidget {
                       backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
               ],

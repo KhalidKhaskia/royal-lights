@@ -10,7 +10,7 @@ class EditorialScreenTitle extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.trailing,
-    this.padding = const EdgeInsets.only(left: 32, right: 32, top: 48, bottom: 24),
+    this.padding = const EdgeInsets.only(left: 32, right: 32, top: 28, bottom: 24),
   });
 
   final String title;

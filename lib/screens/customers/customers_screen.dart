@@ -28,6 +28,15 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final _searchCtrl = TextEditingController();
   String _customersDebtSort = 'highToLow'; // highToLow | lowToHigh
 
+  int _gridCols(double width) {
+    // Aim: iPad 11" should fit 4 cards per row.
+    // Keep max at 4 for consistent density.
+    const minTileWidth = 185.0;
+    const spacing = 14.0;
+    final cols = ((width + spacing) / (minTileWidth + spacing)).floor();
+    return cols.clamp(2, 4);
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -138,148 +147,185 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   children: [
                     EditorialScreenTitle(
                       title: l10n?.tr('customers') ?? 'Customers',
-                      subtitle: Text(
-                        'סה״כ לקוחות: ${customers.length}',
-                        style: GoogleFonts.assistant(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.secondary,
-                        ),
-                      ),
                       padding: const EdgeInsets.only(
                         left: 32,
                         right: 32,
-                        top: 48,
-                        bottom: 8,
+                        top: 28,
+                        bottom: 6,
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Material(
-                        elevation: 2,
-                        shadowColor: Colors.black.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(20),
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (_) => setState(() {}),
-                          style: GoogleFonts.assistant(
-                            color: AppTheme.onSurface,
-                          ),
-                          decoration: InputDecoration(
-                            floatingLabelBehavior: FloatingLabelBehavior.auto,
-                            floatingLabelAlignment:
-                                FloatingLabelAlignment.start,
-                            labelText: _customersSearchFieldLabel(),
-                            labelStyle: GoogleFonts.assistant(
-                              color: AppTheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                            floatingLabelStyle: GoogleFonts.assistant(
-                              color: AppTheme.secondary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              color: AppTheme.secondary,
-                            ),
-                            filled: true,
-                            fillColor: AppTheme.surfaceContainerLowest,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(
-                                color: AppTheme.outlineVariant
-                                    .withValues(alpha: 0.35),
+                      padding: const EdgeInsets.fromLTRB(32, 0, 32, 0),
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          final isTight = c.maxWidth < 760;
+                          final searchField = Material(
+                            elevation: 2,
+                            shadowColor: Colors.black.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(20),
+                            child: TextField(
+                              controller: _searchCtrl,
+                              onChanged: (_) => setState(() {}),
+                              style: GoogleFonts.assistant(
+                                color: AppTheme.onSurface,
+                              ),
+                              decoration: InputDecoration(
+                                floatingLabelBehavior: FloatingLabelBehavior.auto,
+                                floatingLabelAlignment:
+                                    FloatingLabelAlignment.start,
+                                labelText: _customersSearchFieldLabel(),
+                                labelStyle: GoogleFonts.assistant(
+                                  color: AppTheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                                floatingLabelStyle: GoogleFonts.assistant(
+                                  color: AppTheme.secondary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search_rounded,
+                                  color: AppTheme.secondary,
+                                ),
+                                filled: true,
+                                fillColor: AppTheme.surfaceContainerLowest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(
+                                    color: AppTheme.outlineVariant
+                                        .withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(
+                                    color: AppTheme.outlineVariant
+                                        .withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(
+                                    color: AppTheme.secondary,
+                                    width: 1.6,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  8,
+                                  14,
+                                  12,
+                                  14,
+                                ),
                               ),
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(
-                                color: AppTheme.outlineVariant
-                                    .withValues(alpha: 0.35),
-                              ),
+                          );
+
+                          final sort = DropdownMenu<String>(
+                            key: ValueKey(
+                              '${Localizations.localeOf(context).languageCode}_$_customersDebtSort',
                             ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: const BorderSide(
-                                color: AppTheme.secondary,
-                                width: 1.6,
-                              ),
+                            initialSelection: _customersDebtSort,
+                            width: isTight ? 240 : 260,
+                            menuStyle: appDropdownMenuStyle(),
+                            inputDecorationTheme:
+                                appDropdownInputDecorationTheme().copyWith(
+                              fillColor: Colors.white,
                             ),
-                            contentPadding: const EdgeInsets.fromLTRB(
-                              8,
-                              14,
-                              12,
-                              14,
+                            decorationBuilder:
+                                (context, MenuController controller) {
+                              return animatedDropdownDecorationBuilder(
+                                label: Text(
+                                  _l10nOrLocale(
+                                    context,
+                                    l10n,
+                                    'sortByDebt',
+                                    en: 'Sort by debt',
+                                    he: 'מיין לפי חוב',
+                                    ar: 'ترتيب حسب الدين',
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                iconSize: 18,
+                              )(context, controller);
+                            },
+                            onSelected: (v) => setState(
+                              () => _customersDebtSort =
+                                  v ?? _customersDebtSort,
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(32, 18, 32, 0),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: DropdownMenu<String>(
-                          key: ValueKey(
-                            '${Localizations.localeOf(context).languageCode}_$_customersDebtSort',
-                          ),
-                          initialSelection: _customersDebtSort,
-                          width: 280,
-                          menuStyle: appDropdownMenuStyle(),
-                          inputDecorationTheme:
-                              appDropdownInputDecorationTheme().copyWith(
-                            fillColor: Colors.white,
-                          ),
-                          decorationBuilder:
-                              (context, MenuController controller) {
-                            return animatedDropdownDecorationBuilder(
-                              label: Text(
-                                _l10nOrLocale(
+                            dropdownMenuEntries: [
+                              DropdownMenuEntry<String>(
+                                value: 'lowToHigh',
+                                label: _l10nOrLocale(
                                   context,
                                   l10n,
-                                  'sortByDebt',
-                                  en: 'Sort by debt',
-                                  he: 'מיין לפי חוב',
-                                  ar: 'ترتيب حسب الدين',
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
+                                  'debtLowToHigh',
+                                  en: 'Low to high',
+                                  he: 'נמוך עד גבוה',
+                                  ar: 'من الأقل إلى الأعلى',
                                 ),
                               ),
-                              iconSize: 18,
-                            )(context, controller);
-                          },
-                          onSelected: (v) => setState(
-                            () => _customersDebtSort = v ?? _customersDebtSort,
-                          ),
-                          dropdownMenuEntries: [
-                            DropdownMenuEntry<String>(
-                              value: 'lowToHigh',
-                              label: _l10nOrLocale(
-                                context,
-                                l10n,
-                                'debtLowToHigh',
-                                en: 'Low to high',
-                                he: 'נמוך עד גבוה',
-                                ar: 'من الأقل إلى الأعلى',
+                              DropdownMenuEntry<String>(
+                                value: 'highToLow',
+                                label: _l10nOrLocale(
+                                  context,
+                                  l10n,
+                                  'debtHighToLow',
+                                  en: 'High to low',
+                                  he: 'גבוה עד נמוך',
+                                  ar: 'من الأعلى إلى الأقل',
+                                ),
+                              ),
+                            ],
+                          );
+
+                          final countPill = Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.secondaryContainer.withValues(
+                                alpha: 0.45,
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: AppTheme.outlineVariant.withValues(
+                                  alpha: 0.14,
+                                ),
                               ),
                             ),
-                            DropdownMenuEntry<String>(
-                              value: 'highToLow',
-                              label: _l10nOrLocale(
-                                context,
-                                l10n,
-                                'debtHighToLow',
-                                en: 'High to low',
-                                he: 'גבוה עד נמוך',
-                                ar: 'من الأعلى إلى الأقل',
+                            child: Text(
+                              'סה״כ לקוחות: ${customers.length}',
+                              style: GoogleFonts.assistant(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.secondary,
                               ),
                             ),
-                          ],
-                        ),
+                          );
+
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Wrap(
+                              spacing: 12,
+                              runSpacing: 10,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              alignment: WrapAlignment.spaceBetween,
+                              children: [
+                                SizedBox(
+                                  width: isTight ? c.maxWidth : c.maxWidth - 260 - 12 - 190,
+                                  child: searchField,
+                                ),
+                                sort,
+                                countPill,
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -316,15 +362,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   sliver: SliverLayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.crossAxisExtent;
-                      final cols = width > 900
-                          ? 4
-                          : width > 600
-                              ? 3
-                              : 2;
+                      final cols = _gridCols(width);
                       return SliverGrid(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: cols,
-                          childAspectRatio: 0.72,
+                          // Slightly shorter cards so 4-column layouts breathe.
+                          childAspectRatio: 0.78,
                           crossAxisSpacing: 14,
                           mainAxisSpacing: 14,
                         ),

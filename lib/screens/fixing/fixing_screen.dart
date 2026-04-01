@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/fixing_ticket_item.dart';
 import '../../models/fixing_ticket.dart';
 import '../../providers/providers.dart';
+import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/editorial_screen_title.dart';
 import 'create_fixing_ticket_dialog.dart';
 
@@ -373,7 +374,10 @@ class _FixingScreenState extends ConsumerState<FixingScreen> {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const AppLoadingOverlay(
+                isLoading: true,
+                child: SizedBox.expand(),
+              ),
               error: (e, _) => Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),

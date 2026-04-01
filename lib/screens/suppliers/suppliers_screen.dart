@@ -6,6 +6,7 @@ import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/supplier.dart';
 import '../../providers/providers.dart';
+import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/editorial_screen_title.dart';
 
 class SuppliersScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,14 @@ class SuppliersScreen extends ConsumerStatefulWidget {
 
 class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
   final _searchCtrl = TextEditingController();
+
+  int _gridCols(double width) {
+    // Aim: iPad 11" should fit 4 cards per row.
+    const minTileWidth = 185.0;
+    const spacing = 14.0;
+    final cols = ((width + spacing) / (minTileWidth + spacing)).floor();
+    return cols.clamp(2, 4);
+  }
 
   @override
   void dispose() {
@@ -170,17 +179,13 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.maxWidth;
-                      final cols = width > 900
-                          ? 4
-                          : width > 600
-                              ? 3
-                              : 2;
+                      final cols = _gridCols(width);
 
                       return GridView.builder(
                         padding: const EdgeInsets.only(bottom: 88),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: cols,
-                          childAspectRatio: 0.72,
+                          childAspectRatio: 0.78,
                           crossAxisSpacing: 14,
                           mainAxisSpacing: 14,
                         ),
@@ -208,7 +213,10 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
                   ),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const AppLoadingOverlay(
+                isLoading: true,
+                child: SizedBox.expand(),
+              ),
               error: (e, _) => Center(
                 child: Text(
                   'Error: $e',
