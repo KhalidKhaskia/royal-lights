@@ -8,8 +8,10 @@ import '../services/order_service.dart';
 import '../services/payment_service.dart';
 import '../services/supplier_service.dart';
 import '../services/room_service.dart';
+import '../services/inventory_service.dart';
 import '../models/customer.dart';
 import '../models/fixing_ticket.dart';
+import '../models/inventory_item.dart';
 import '../models/order.dart';
 import '../models/payment.dart';
 import '../models/supplier.dart';
@@ -72,6 +74,10 @@ final fixingServiceProvider = Provider<FixingService>((ref) {
   return FixingService(ref.watch(supabaseClientProvider));
 });
 
+final inventoryServiceProvider = Provider<InventoryService>((ref) {
+  return InventoryService(ref.watch(supabaseClientProvider));
+});
+
 // ─── DATA PROVIDERS (AsyncNotifier pattern) ───
 
 // Customers
@@ -104,6 +110,13 @@ final suppliersProvider = FutureProvider.autoDispose<List<Supplier>>((
   ref,
 ) async {
   final service = ref.watch(supplierServiceProvider);
+  return service.getAll();
+});
+
+// Inventory items
+final inventoryItemsProvider =
+    FutureProvider.autoDispose<List<InventoryItem>>((ref) async {
+  final service = ref.watch(inventoryServiceProvider);
   return service.getAll();
 });
 

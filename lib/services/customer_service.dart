@@ -75,6 +75,13 @@ class CustomerService {
   }
 
   Future<void> delete(String id) async {
+    // Best-effort: remove stored photo as well (ignore missing/permission errors).
+    const bucket = 'customer-photos';
+    final path = '$id/photo.jpg';
+    try {
+      await _client.storage.from(bucket).remove([path]);
+    } catch (_) {}
+
     await _client.from('customers').delete().eq('id', id);
   }
 }

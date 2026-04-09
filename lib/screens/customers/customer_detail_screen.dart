@@ -46,11 +46,97 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
 
 class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   late Customer _customer;
+  bool _deletingCustomer = false;
 
   @override
   void initState() {
     super.initState();
     _customer = widget.customer;
+  }
+
+  Future<void> _deleteCustomer(AppLocalizations? l10n) async {
+    if (_deletingCustomer) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceContainerLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          l10n?.tr('delete') ?? 'Delete',
+          style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          _trOrLocale(
+            context,
+            l10n,
+            'deleteCustomerConfirm',
+            en: 'Delete ${_customer.cardName}?',
+            he: 'למחוק את ${_customer.cardName}?',
+            ar: 'حذف ${_customer.cardName}؟',
+          ),
+          style: GoogleFonts.assistant(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              l10n?.tr('cancel') ?? 'Cancel',
+              style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            child: Text(
+              l10n?.tr('delete') ?? 'Delete',
+              style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingCustomer = true);
+    try {
+      await ref.read(customerServiceProvider).delete(_customer.id);
+      ref.invalidate(customersProvider);
+      ref.invalidate(customerOrdersProvider(_customer.id));
+      ref.invalidate(customerPaymentsProvider(_customer.id));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _trOrLocale(
+              context,
+              l10n,
+              'customerDeleted',
+              en: 'Customer deleted',
+              he: 'הלקוח נמחק',
+              ar: 'تم حذف العميل',
+            ),
+          ),
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${l10n?.tr('error') ?? 'Error'}: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingCustomer = false);
+    }
   }
 
   Future<void> _sendWhatsAppReport(
@@ -162,14 +248,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         iconTheme: const IconThemeData(color: AppTheme.onSurface),
-        actions: [
-          IconButton(
-            tooltip: l10n?.tr('editCustomerDetails') ?? 'Edit',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => _openEditDialog(l10n),
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: const [SizedBox(width: 8)],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -242,6 +321,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     },
                     onEditDetails: () => _openEditDialog(l10n),
                     onSendReport: () => _sendWhatsAppReport(context, l10n),
+                    onDeleteCustomer: () => _deleteCustomer(l10n),
+                    deletingCustomer: _deletingCustomer,
                   ),
                 ),
                 SliverPadding(
@@ -290,6 +371,8 @@ class _HeroBanner extends ConsumerStatefulWidget {
   final VoidCallback onNewOrder;
   final VoidCallback onEditDetails;
   final VoidCallback onSendReport;
+  final VoidCallback onDeleteCustomer;
+  final bool deletingCustomer;
 
   const _HeroBanner({
     required this.customer,
@@ -298,6 +381,8 @@ class _HeroBanner extends ConsumerStatefulWidget {
     required this.onNewOrder,
     required this.onEditDetails,
     required this.onSendReport,
+    required this.onDeleteCustomer,
+    required this.deletingCustomer,
   });
 
   @override
@@ -462,6 +547,8 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     final onEditDetails = widget.onEditDetails;
     final onSendReport = widget.onSendReport;
     final onNewOrder = widget.onNewOrder;
+    final onDeleteCustomer = widget.onDeleteCustomer;
+    final deletingCustomer = widget.deletingCustomer;
 
     var isVip = false;
     if (ordersAsync.hasValue) {
@@ -879,6 +966,26 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
                             en: 'New order',
                             he: 'הזמנה חדשה',
                             ar: 'طلب جديد',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: deletingCustomer ? null : onDeleteCustomer,
+                        style: actionStyle(AppTheme.error, AppTheme.error),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'delete',
+                            en: 'Delete',
+                            he: 'מחק',
+                            ar: 'حذف',
                           ),
                           style: GoogleFonts.assistant(
                             fontWeight: FontWeight.w700,

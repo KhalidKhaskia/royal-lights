@@ -11,6 +11,7 @@ import '../screens/payments/payments_screen.dart';
 import '../screens/assemblies/assemblies_screen.dart';
 import '../screens/suppliers/suppliers_screen.dart';
 import '../screens/fixing/fixing_screen.dart';
+import '../screens/inventory/inventory_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -22,6 +23,24 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int? _prevIndex;
   bool _sidebarCollapsed = false;
+
+  /// When ARB is stale, [AppLocalizations.tr] returns the key — treat as missing.
+  String _l10nOrLocale(
+    BuildContext context,
+    AppLocalizations? l10n,
+    String key, {
+    required String en,
+    required String he,
+    required String ar,
+  }) {
+    final t = l10n?.tr(key) ?? '';
+    if (t.isNotEmpty && t != key) return t;
+    return switch (Localizations.localeOf(context).languageCode) {
+      'he' => he,
+      'ar' => ar,
+      _ => en,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,20 +59,99 @@ class _AppShellState extends ConsumerState<AppShell> {
       const PaymentsScreen(),
       const AssembliesScreen(),
       const SuppliersScreen(),
+      const InventoryScreen(),
     ];
     // Keys so AnimatedSwitcher can animate between screens
     final screenKeys = List.generate(screens.length, (i) => ValueKey<int>(i));
 
     final navItems = [
-      _NavItem(Icons.dashboard_rounded, l10n?.tr('dashboard') ?? 'Dashboard'),
-      _NavItem(Icons.people_rounded, l10n?.tr('customers') ?? 'Customers'),
-      _NavItem(Icons.shopping_cart_rounded, l10n?.tr('orders') ?? 'Orders'),
-      _NavItem(Icons.build_circle_outlined, l10n?.tr('fixing') ?? 'Fixing'),
-      _NavItem(Icons.payment_rounded, l10n?.tr('payments') ?? 'Payments'),
-      _NavItem(Icons.build_rounded, l10n?.tr('assemblies') ?? 'Assemblies'),
+      _NavItem(
+        Icons.dashboard_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'dashboard',
+          en: 'Dashboard',
+          he: 'לוח בקרה',
+          ar: 'لوحة التحكم',
+        ),
+      ),
+      _NavItem(
+        Icons.people_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'customers',
+          en: 'Customers',
+          he: 'לקוחות',
+          ar: 'العملاء',
+        ),
+      ),
+      _NavItem(
+        Icons.shopping_cart_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'orders',
+          en: 'Orders',
+          he: 'הזמנות',
+          ar: 'الطلبات',
+        ),
+      ),
+      _NavItem(
+        Icons.build_circle_outlined,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'fixing',
+          en: 'Fixing',
+          he: 'תיקון',
+          ar: 'إصلاح',
+        ),
+      ),
+      _NavItem(
+        Icons.payment_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'payments',
+          en: 'Payments',
+          he: 'תשלומים',
+          ar: 'المدفوعات',
+        ),
+      ),
+      _NavItem(
+        Icons.build_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'assemblies',
+          en: 'Assemblies',
+          he: 'הרכבות',
+          ar: 'التركيبات',
+        ),
+      ),
       _NavItem(
         Icons.local_shipping_rounded,
-        l10n?.tr('suppliers') ?? 'Suppliers',
+        _l10nOrLocale(
+          context,
+          l10n,
+          'suppliers',
+          en: 'Suppliers',
+          he: 'ספקים',
+          ar: 'الموردون',
+        ),
+      ),
+      _NavItem(
+        Icons.inventory_2_rounded,
+        _l10nOrLocale(
+          context,
+          l10n,
+          'inventory',
+          en: 'Inventory',
+          he: 'מלאי',
+          ar: 'المخزون',
+        ),
       ),
     ];
 

@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_theme.dart';
@@ -12,10 +13,12 @@ import '../../models/order.dart';
 import '../../models/order_item.dart';
 import '../../models/room.dart';
 import '../../models/supplier.dart';
+import '../../models/inventory_item.dart';
 import '../../providers/providers.dart';
 import '../../widgets/app_dropdown_styles.dart';
 import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/app_round_checkbox.dart';
+import '../../widgets/barcode_scan_dialog.dart';
 
 class OrderFormScreen extends ConsumerStatefulWidget {
   final String? orderId;
@@ -136,6 +139,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   final _customerSelectorKey = GlobalKey();
   OverlayEntry? _customerOverlayEntry;
+  OverlayEntry? _inventoryOverlayEntry;
   final _customerTextController = TextEditingController();
   final _customerFocusNode = FocusNode();
   late final AnimationController _bottomDrawerController;
@@ -252,10 +256,495 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   double get _vatAmount => _subtotalExVat * _vatRate;
   double get _grandTotalWithVat => _subtotalExVat + _vatAmount;
 
+  Future<void> _pickFromInventory(_ItemRow row) async {
+    if (_isReadOnly) return;
+
+    final l10n = AppLocalizations.of(context);
+    try {
+      final items = await ref.read(inventoryItemsProvider.future);
+      if (!mounted) return;
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n?.tr('noData') ?? 'No Data',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final suppliers = await ref.read(suppliersProvider.future);
+      final supplierById = <String, Supplier>{
+        for (final s in suppliers) s.id: s,
+      };
+
+      if (!mounted) return;
+      final picked = await showDialog<InventoryItem>(
+        context: context,
+        builder: (ctx) {
+          final searchCtrl = TextEditingController();
+          var q = '';
+          return StatefulBuilder(
+            builder: (context, setLocal) {
+              final filtered = items.where((it) {
+                if (q.isEmpty) return true;
+                final qq = q.toLowerCase();
+                return it.description.toLowerCase().contains(qq) ||
+                    (it.brand ?? '').toLowerCase().contains(qq) ||
+                    (it.barcode ?? '').toLowerCase().contains(qq);
+              }).toList();
+
+              return AlertDialog(
+                backgroundColor: AppTheme.surfaceContainerLowest,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 18,
+                ),
+                title: Text(
+                  _orderTableColumnLabel(
+                    context,
+                    l10n,
+                    'inventory',
+                    en: 'Inventory',
+                    he: 'מלאי',
+                    ar: 'المخزون',
+                  ),
+                  style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
+                ),
+                content: SizedBox(
+                  width: 720,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: searchCtrl,
+                        onChanged: (v) => setLocal(() => q = v.trim()),
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          hintText: _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'searchItemsHint',
+                            en: 'Search by description, brand, barcode…',
+                            he: 'חיפוש לפי תיאור, מותג, ברקוד…',
+                            ar: 'ابحث بالوصف، الماركة، الباركود…',
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: AppTheme.outlineVariant
+                                  .withValues(alpha: 0.25),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Material(
+                            color: Colors.white,
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: AppTheme.outlineVariant
+                                    .withValues(alpha: 0.14),
+                              ),
+                              itemBuilder: (context, index) {
+                                final it = filtered[index];
+                                final supplier = it.supplierId != null
+                                    ? supplierById[it.supplierId!]
+                                    : null;
+                                final subtitleParts = <String>[
+                                  if (supplier != null &&
+                                      supplier.companyName.trim().isNotEmpty)
+                                    supplier.companyName.trim(),
+                                  if ((it.brand ?? '').trim().isNotEmpty)
+                                    it.brand!.trim(),
+                                  if ((it.barcode ?? '').trim().isNotEmpty)
+                                    it.barcode!.trim(),
+                                ];
+                                return ListTile(
+                                  dense: false,
+                                  leading: Container(
+                                    width: 64,
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: AppTheme.outlineVariant
+                                            .withValues(alpha: 0.18),
+                                      ),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: (it.imageUrl != null &&
+                                            it.imageUrl!.trim().isNotEmpty)
+                                        ? CachedNetworkImage(
+                                            imageUrl: it.imageUrl!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Icon(
+                                            Icons.image_outlined,
+                                            size: 22,
+                                            color: AppTheme.outline
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                  ),
+                                  title: Text(
+                                    it.description,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.assistant(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  subtitle: subtitleParts.isEmpty
+                                      ? null
+                                      : Text(
+                                          subtitleParts.join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.assistant(
+                                            color: AppTheme.onSurfaceVariant,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                  trailing: Text(
+                                    it.consumerPrice == null
+                                        ? '—'
+                                        : '₪${it.consumerPrice!.toStringAsFixed(0)}',
+                                    style: GoogleFonts.assistant(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.onSurface,
+                                    ),
+                                  ),
+                                  onTap: () => Navigator.pop(ctx, it),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(l10n?.tr('cancel') ?? 'Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (picked == null || !mounted) return;
+
+      setState(() {
+        _markDirty();
+        // Auto-assign fields from inventory.
+        row.nameCtrl.text = picked.description;
+        row.itemNumberCtrl.text = picked.barcode ?? '';
+        if (picked.consumerPrice != null) {
+          row.priceCtrl.text = picked.consumerPrice!.toStringAsFixed(0);
+        }
+        row.supplierId = picked.supplierId;
+        row.imageUrl = picked.imageUrl;
+
+        // If stock exists, default the "existing in store" flag on (user can override).
+        if (picked.availableStock > 0) {
+          row.existingInStore = true;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${l10n?.tr('error') ?? 'Error'}: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
   void _hideCustomerDropdown() {
     _customerOverlayEntry?.remove();
     _customerOverlayEntry = null;
     setState(() {});
+  }
+
+  void _hideInventoryDropdown() {
+    _inventoryOverlayEntry?.remove();
+    _inventoryOverlayEntry = null;
+  }
+
+  void _applyInventoryToRow(_ItemRow row, InventoryItem picked) {
+    // Auto-assign fields from inventory.
+    row.nameCtrl.text = picked.description;
+    row.itemNumberCtrl.text = picked.barcode ?? '';
+    if (picked.consumerPrice != null) {
+      row.priceCtrl.text = picked.consumerPrice!.toStringAsFixed(0);
+    }
+    row.supplierId = picked.supplierId;
+    row.imageUrl = picked.imageUrl;
+    row.warrantyYears = picked.warrantyYears;
+
+    // If stock exists, default the "existing in store" flag on (user can override).
+    if (picked.availableStock > 0) {
+      row.existingInStore = true;
+    }
+  }
+
+  void _showImagePreview(String imageUrl, AppLocalizations? l10n) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: AppTheme.surfaceContainerLowest,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: IconButton(
+                      tooltip: l10n?.tr('close') ?? 'Close',
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
+                  Flexible(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showInventorySuggestions({
+    required BuildContext context,
+    required GlobalKey anchorKey,
+    required _ItemRow row,
+    required List<InventoryItem> items,
+    required AppLocalizations? l10n,
+    required bool fromNameField,
+  }) {
+    if (_isReadOnly) return;
+    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final pos = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final overlay = Overlay.of(context);
+    final screenW = MediaQuery.sizeOf(context).width;
+    const screenMargin = 8.0;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+
+    final query = (fromNameField
+            ? row.nameCtrl.text.trim()
+            : row.itemNumberCtrl.text.trim())
+        .toLowerCase();
+    if (query.isEmpty) {
+      _hideInventoryDropdown();
+      return;
+    }
+
+    final filtered = items.where((it) {
+      final desc = it.description.toLowerCase();
+      final brand = (it.brand ?? '').toLowerCase();
+      final barcode = (it.barcode ?? '').toLowerCase();
+      final matches =
+          desc.contains(query) || brand.contains(query) || barcode.contains(query);
+      if (!matches) return false;
+      // When searching by name, show "items that there is" (in stock) first/only.
+      if (fromNameField) return it.availableStock > 0;
+      return true;
+    }).take(12).toList();
+
+    _hideInventoryDropdown();
+    _inventoryOverlayEntry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _hideInventoryDropdown,
+            ),
+          ),
+          Positioned(
+            left: () {
+              final desiredW = (size.width + 220).clamp(360.0, 560.0);
+              final minLeft = screenMargin;
+              final maxLeft = (screenW - screenMargin - desiredW).clamp(
+                screenMargin,
+                double.infinity,
+              );
+
+              // In RTL, align the menu's right edge to the field's right edge.
+              final rawLeft =
+                  isRtl ? (pos.dx + size.width - desiredW) : pos.dx;
+              return rawLeft.clamp(minLeft, maxLeft);
+            }(),
+            top: pos.dy + size.height + 4,
+            width: (size.width + 220).clamp(360.0, 560.0),
+            child: Material(
+              elevation: 8,
+              shadowColor: Colors.black.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(14),
+              color: AppTheme.surfaceContainerLowest,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: filtered.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text(
+                          l10n?.tr('noMatchingResults') ?? 'No matches',
+                          style: GoogleFonts.assistant(
+                            color: AppTheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: AppTheme.outlineVariant.withValues(alpha: 0.12),
+                        ),
+                        itemBuilder: (context, i) {
+                          final it = filtered[i];
+                          final subtitleParts = <String>[
+                            if ((it.brand ?? '').trim().isNotEmpty) it.brand!.trim(),
+                            if ((it.barcode ?? '').trim().isNotEmpty) it.barcode!.trim(),
+                          ];
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                _markDirty();
+                                _applyInventoryToRow(row, it);
+                              });
+                              _hideInventoryDropdown();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 64,
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: AppTheme.outlineVariant
+                                            .withValues(alpha: 0.18),
+                                      ),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: (it.imageUrl != null &&
+                                            it.imageUrl!.trim().isNotEmpty)
+                                        ? CachedNetworkImage(
+                                            imageUrl: it.imageUrl!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Icon(
+                                            Icons.image_outlined,
+                                            size: 22,
+                                            color: AppTheme.outline
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          it.description,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.assistant(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppTheme.onSurface,
+                                          ),
+                                        ),
+                                        if (subtitleParts.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            subtitleParts.join(' · '),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.assistant(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    it.consumerPrice == null
+                                        ? '—'
+                                        : '₪${it.consumerPrice!.toStringAsFixed(0)}',
+                                    style: GoogleFonts.assistant(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_inventoryOverlayEntry!);
   }
 
   void _onCustomerFocusChange() {
@@ -423,6 +912,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final customersAsync = ref.watch(customersProvider);
     final roomsAsync = ref.watch(roomsProvider);
     final suppliersAsync = ref.watch(suppliersProvider);
+    final inventoryAsync = ref.watch(inventoryItemsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -604,33 +1094,13 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                 ),
                               ),
                               const SizedBox(width: 20),
-                              // Assembly toggle (fixed width so it never moves)
                               SizedBox(
-                                width: 200,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _orderTableColumnLabel(
-                                        context,
-                                        l10n,
-                                        'assemblyRequired',
-                                        en: 'Assembly Required',
-                                        he: 'דרוש הרכבה',
-                                        ar: 'يتطلب تركيب',
-                                      ),
-                                      style: GoogleFonts.assistant(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IgnorePointer(
-                                      ignoring: _isReadOnly,
-                                      child: _AssemblyGoldSwitch(
-                                        value: _assemblyRequired,
-                                        onChanged: (v) {
+                                width: 240,
+                                child: SwitchListTile.adaptive(
+                                  value: _assemblyRequired,
+                                  onChanged: _isReadOnly
+                                      ? null
+                                      : (v) {
                                           setState(() {
                                             _assemblyRequired = v;
                                             for (final item in _items) {
@@ -638,9 +1108,21 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                             }
                                           });
                                         },
-                                      ),
+                                  title: Text(
+                                    _orderTableColumnLabel(
+                                      context,
+                                      l10n,
+                                      'assemblyRequired',
+                                      en: 'Assembly Required',
+                                      he: 'דרוש הרכבה',
+                                      ar: 'يتطلب تركيب',
                                     ),
-                                  ],
+                                    style: GoogleFonts.assistant(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.onSurface,
+                                    ),
+                                  ),
+                                  contentPadding: EdgeInsets.zero,
                                 ),
                               ),
                               const SizedBox(width: 20),
@@ -1086,6 +1568,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                         l10n,
                                         rooms,
                                         suppliers,
+                                        inventoryAsync.value ??
+                                            const <InventoryItem>[],
                                         readOnly: _isReadOnly,
                                       ),
                                       loading: () => const Center(
@@ -1410,7 +1894,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         ],
       ),
       padding: fillVertical
-          ? const EdgeInsets.fromLTRB(16, 8, 16, 8)
+          ? const EdgeInsets.fromLTRB(14, 6, 14, 6)
           : const EdgeInsets.all(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1446,7 +1930,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
             ],
           ),
-          SizedBox(height: fillVertical ? 4 : 10),
+          SizedBox(height: fillVertical ? 3 : 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1477,12 +1961,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
             ],
           ),
-          SizedBox(height: fillVertical ? 5 : 20),
+          SizedBox(height: fillVertical ? 4 : 20),
           Divider(
             height: 1,
             color: AppTheme.onPrimary.withValues(alpha: 0.2),
           ),
-          SizedBox(height: fillVertical ? 5 : 18),
+          SizedBox(height: fillVertical ? 4 : 18),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1538,7 +2022,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
             ],
           ),
-          SizedBox(height: fillVertical ? 8 : 22),
+          SizedBox(height: fillVertical ? 6 : 22),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
@@ -1549,7 +2033,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 disabledBackgroundColor:
                     AppTheme.secondary.withValues(alpha: 0.5),
                 padding: EdgeInsets.symmetric(
-                  vertical: fillVertical ? 8 : 16,
+                  vertical: fillVertical ? 7 : 16,
                   horizontal: fillVertical ? 12 : 16,
                 ),
                 shape: RoundedRectangleBorder(
@@ -1574,7 +2058,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             ),
           ),
           if (!_waitingSupplierConfirmation) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: fillVertical ? 8 : 10),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -1598,7 +2082,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ),
                   ),
                   padding: EdgeInsets.symmetric(
-                    vertical: fillVertical ? 7 : 12,
+                    vertical: fillVertical ? 6 : 12,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1625,7 +2109,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             ),
           ],
           if (_waitingSupplierConfirmation) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: fillVertical ? 8 : 10),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -1636,7 +2120,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   side:
                       BorderSide(color: AppTheme.error.withValues(alpha: 0.75)),
                   padding: EdgeInsets.symmetric(
-                    vertical: fillVertical ? 7 : 12,
+                    vertical: fillVertical ? 6 : 12,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1699,8 +2183,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     );
   }
 
-  Widget _buildItemsTable(BuildContext context, AppLocalizations? l10n,
-      List<Room> rooms, List<Supplier> suppliers,
+  Widget _buildItemsTable(
+    BuildContext context,
+    AppLocalizations? l10n,
+    List<Room> rooms,
+    List<Supplier> suppliers,
+    List<InventoryItem> inventoryItems,
       {bool readOnly = false}) {
     final cellStyle = GoogleFonts.assistant(
       color: AppTheme.onSurface,
@@ -1760,16 +2248,6 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               en: 'Item name',
               he: 'שם גוף',
               ar: 'اسم الصنف',
-            ),
-          ),
-          DataColumn(
-            label: _orderTableHeader(
-              context,
-              l10n,
-              'image',
-              en: 'Image',
-              he: 'תמונה',
-              ar: 'صورة',
             ),
           ),
           DataColumn(
@@ -1879,46 +2357,125 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
               DataCell(
                 SizedBox(
-                  width: 108,
-                  child: TextField(
-                    controller: item.itemNumberCtrl,
-                    enabled: !readOnly,
-                    decoration: orderTableCellDecoration(),
-                    style: cellStyle,
+                  width: 150,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: item.itemNumberKey,
+                          controller: item.itemNumberCtrl,
+                          enabled: !readOnly,
+                          onChanged: (_) {
+                            _markDirty();
+                            _showInventorySuggestions(
+                              context: context,
+                              anchorKey: item.itemNumberKey,
+                              row: item,
+                              items: inventoryItems,
+                              l10n: l10n,
+                              fromNameField: false,
+                            );
+                          },
+                          decoration: orderTableCellDecoration(),
+                          style: cellStyle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: l10n?.tr('scanBarcode') ?? 'Scan barcode',
+                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                        onPressed: readOnly
+                            ? null
+                            : () async {
+                                final code =
+                                    await BarcodeScanDialog.show(context);
+                                if (!mounted || code == null) return;
+                                setState(() {
+                                  _markDirty();
+                                  item.itemNumberCtrl.text = code;
+                                  _showInventorySuggestions(
+                                    context: context,
+                                    anchorKey: item.itemNumberKey,
+                                    row: item,
+                                    items: inventoryItems,
+                                    l10n: l10n,
+                                    fromNameField: false,
+                                  );
+                                });
+                              },
+                      ),
+                      const SizedBox(width: 2),
+                      IconButton(
+                        tooltip: l10n?.tr('inventory') ?? 'Inventory',
+                        icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                        onPressed:
+                            readOnly ? null : () => _pickFromInventory(item),
+                      ),
+                    ],
                   ),
                 ),
               ),
               DataCell(
                 SizedBox(
-                  width: 148,
-                  child: TextField(
-                    controller: item.nameCtrl,
-                    enabled: !readOnly,
-                    decoration: orderTableCellDecoration(),
-                    style: cellStyle,
-                  ),
-                ),
-              ),
-              DataCell(
-                IconButton(
-                  icon: Icon(
-                    item.imageUrl != null
-                        ? Icons.image
-                        : Icons.add_a_photo_outlined,
-                    color: item.imageUrl != null
-                        ? AppTheme.success
-                        : AppTheme.textSecondary,
-                    size: 20,
-                  ),
-                  onPressed: readOnly
-                      ? null
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Camera/Gallery - requires device'),
+                  width: 192,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: item.nameKey,
+                          controller: item.nameCtrl,
+                          enabled: !readOnly,
+                          onChanged: (_) {
+                            _markDirty();
+                            _showInventorySuggestions(
+                              context: context,
+                              anchorKey: item.nameKey,
+                              row: item,
+                              items: inventoryItems,
+                              l10n: l10n,
+                              fromNameField: true,
+                            );
+                          },
+                          decoration: orderTableCellDecoration(),
+                          style: cellStyle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: (item.imageUrl == null ||
+                                item.imageUrl!.trim().isEmpty)
+                            ? null
+                            : () => _showImagePreview(item.imageUrl!, l10n),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceContainerHighest
+                                .withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppTheme.outlineVariant
+                                  .withValues(alpha: 0.22),
                             ),
-                          );
-                        },
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: (item.imageUrl != null &&
+                                  item.imageUrl!.trim().isNotEmpty)
+                              ? CachedNetworkImage(
+                                  imageUrl: item.imageUrl!,
+                                  fit: BoxFit.cover,
+                                )
+                              : Icon(
+                                  Icons.image_outlined,
+                                  size: 18,
+                                  color: AppTheme.outline
+                                      .withValues(alpha: 0.55),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               DataCell(
@@ -2429,6 +2986,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     _bottomDrawerController.dispose();
     _itemsTableHorizontalScrollCtrl.dispose();
     _hideCustomerDropdown();
+    _hideInventoryDropdown();
     for (final item in _items) {
       item.dispose();
     }
@@ -2436,134 +2994,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   }
 }
 
-/// Gold track + fixed-size thumb (same on/off); subtle scale pulse when turning on.
-class _AssemblyGoldSwitch extends StatefulWidget {
-  const _AssemblyGoldSwitch({
-    required this.value,
-    required this.onChanged,
-  });
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  State<_AssemblyGoldSwitch> createState() => _AssemblyGoldSwitchState();
-}
-
-class _AssemblyGoldSwitchState extends State<_AssemblyGoldSwitch>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-  late final Animation<double> _knobScale;
-
-  static const double _trackW = 52;
-  static const double _trackH = 32;
-  static const double _knobSize = 24;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    );
-    _knobScale = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.14)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 38,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.14, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeInCubic)),
-        weight: 62,
-      ),
-    ]).animate(_pulse);
-  }
-
-  @override
-  void didUpdateWidget(covariant _AssemblyGoldSwitch oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!oldWidget.value && widget.value) {
-      _pulse.forward(from: 0);
-    } else if (oldWidget.value && !widget.value) {
-      _pulse.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final trackOn = AppTheme.secondaryContainer;
-    final trackOff = AppTheme.surfaceContainerHighest;
-    final borderOn = AppTheme.secondary.withValues(alpha: 0.42);
-    final borderOff = AppTheme.outlineVariant.withValues(alpha: 0.65);
-
-    return Semantics(
-      toggled: widget.value,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => widget.onChanged(!widget.value),
-          borderRadius: BorderRadius.circular(_trackH / 2),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutCubic,
-            width: _trackW,
-            height: _trackH,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(_trackH / 2),
-              color: widget.value ? trackOn : trackOff,
-              border: Border.all(
-                color: widget.value ? borderOn : borderOff,
-                width: 1,
-              ),
-            ),
-            child: AnimatedAlign(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-              alignment: widget.value
-                  ? AlignmentDirectional.centerEnd
-                  : AlignmentDirectional.centerStart,
-              child: AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, child) {
-                  final scale = widget.value ? _knobScale.value : 1.0;
-                  return Transform.scale(
-                    scale: scale,
-                    child: child,
-                  );
-                },
-                child: Container(
-                  width: _knobSize,
-                  height: _knobSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppTheme.surfaceContainerLowest,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.16),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// (removed) _AssemblyGoldSwitch – replaced with SwitchListTile.adaptive to match
+// the inventory add-item toggle style.
 
 class _ItemRow {
+  final itemNumberKey = GlobalKey();
+  final nameKey = GlobalKey();
   final itemNumberCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final quantityCtrl = TextEditingController(text: '1');
