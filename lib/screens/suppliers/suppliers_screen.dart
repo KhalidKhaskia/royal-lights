@@ -40,7 +40,7 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
     return switch (Localizations.localeOf(context).languageCode) {
       'ar' => 'ابحث بالشركة، جهة الاتصال، الهاتف…',
       'en' => 'Search by company, contact, phone…',
-      _ => 'חיפוש לפי חברה, איש קשר, טלפון…',
+      _ => 'חיפוש סוכנים לפי חברה, איש קשר, טלפון…',
     };
   }
 
@@ -614,7 +614,7 @@ class _SupplierCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                l10n?.tr('supplier') ?? 'ספק',
+                                l10n?.tr('supplier') ?? 'סוכן',
                                 style: GoogleFonts.assistant(
                                   color: AppTheme.secondary,
                                   fontSize: 12,
@@ -693,8 +693,8 @@ class _SupplierCard extends StatelessWidget {
                               fit: BoxFit.scaleDown,
                               child: Text(
                                 (phone == '-')
-                                    ? (l10n?.tr('supplier') ?? 'ספק')
-                                    : (l10n?.tr('supplier') ?? 'ספק'),
+                                    ? (l10n?.tr('supplier') ?? 'סוכן')
+                                    : (l10n?.tr('supplier') ?? 'סוכן'),
                                 style: GoogleFonts.assistant(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
