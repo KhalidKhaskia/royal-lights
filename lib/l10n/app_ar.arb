@@ -210,5 +210,12 @@
   "noPhone": "لا يتوفر رقم هاتف",
   "whatsappError": "تعذر فتح واتساب",
   "balanceZeroLabel": "الحد المستحق",
-  "balanceOverpaidLabel": "مدفوعات زائدة"
+  "balanceOverpaidLabel": "مدفوعات زائدة",
+  "dashboardStockOverview": "نظرة عامة على المخزون",
+  "dashboardStockSubtitle": "الوحدات المتاحة عبر أصناف الكتالوج",
+  "dashboardTotalUnits": "إجمالي الوحدات",
+  "dashboardCatalogueLines": "عدد الأصناف",
+  "dashboardStockOut": "نفد المخزون",
+  "dashboardStockLow": "مخزون منخفض (1–2)",
+  "dashboardStockOk": "مخزون جيد (3+)"
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_theme.dart';
 import '../providers/providers.dart';
@@ -44,6 +45,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.dispose();
   }
 
+  /// Maps Supabase / GoTrue auth errors to short Hebrew copy (no exception dumps).
+  String _friendlyAuthMessage(AuthException e) {
+    final code = e.code ?? '';
+    switch (code) {
+      case 'invalid_credentials':
+      case 'invalid_grant':
+      case 'user_not_found':
+        return 'שם המשתמש או הסיסמה שגויים. בדקו ונסו שוב.';
+      case 'email_not_confirmed':
+      case 'phone_not_confirmed':
+        return 'יש לאשר את כתובת האימייל או הטלפון לפני ההתחברות.';
+      case 'over_request_rate_limit':
+      case 'over_email_send_rate_limit':
+      case 'over_sms_send_rate_limit':
+        return 'יותר מדי ניסיונות התחברות. המתינו רגע ונסו שוב.';
+      case 'user_banned':
+        return 'החשבון חסום. לעזרה פנו לתמיכה.';
+      case 'email_provider_disabled':
+      case 'signup_disabled':
+        return 'ההתחברות אינה זמינה כרגע. פנו למנהל המערכת.';
+      default:
+        final msg = e.message.toLowerCase();
+        if (msg.contains('invalid login') ||
+            msg.contains('invalid credentials')) {
+          return 'שם המשתמש או הסיסמה שגויים. בדקו ונסו שוב.';
+        }
+        return 'לא הצלחנו להתחבר. נסו שוב בעוד רגע.';
+    }
+  }
+
+  String _friendlyGenericMessage(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('timeout')) {
+      return 'פג הזמן להתחברות. בדקו את החיבור לאינטרנט.';
+    }
+    return 'אירעה שגיאה. נסו שוב.';
+  }
+
   Future<void> _handleSubmit() async {
     if (_usernameController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty) {
@@ -67,8 +106,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         _usernameController.text.trim(),
         _passwordController.text.trim(),
       );
+    } on AuthException catch (e) {
+      setState(() => _error = _friendlyAuthMessage(e));
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = _friendlyGenericMessage(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -185,25 +226,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               // Error
                               if (_error != null)
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
                                   margin: const EdgeInsets.only(bottom: 20),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.error.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(16),
+                                    color: AppTheme.error.withValues(alpha: 0.06),
+                                    borderRadius: BorderRadius.circular(18),
                                     border: Border.all(
-                                      color: AppTheme.error.withValues(alpha: 0.25),
+                                      color: AppTheme.error.withValues(alpha: 0.2),
                                     ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.error.withValues(alpha: 0.06),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
                                   child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
-                                      const SizedBox(width: 8),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          Icons.info_outline_rounded,
+                                          color: AppTheme.error.withValues(alpha: 0.9),
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
                                           _error!,
                                           style: GoogleFonts.assistant(
-                                            color: AppTheme.error,
-                                            fontSize: 13,
+                                            color: AppTheme.onSurface.withValues(alpha: 0.88),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.4,
                                           ),
                                         ),
                                       ),

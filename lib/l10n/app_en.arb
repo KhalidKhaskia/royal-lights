@@ -210,5 +210,12 @@
   "noPhone": "No phone number available",
   "whatsappError": "Could not open WhatsApp",
   "balanceZeroLabel": "Balance due",
-  "balanceOverpaidLabel": "Overpaid"
+  "balanceOverpaidLabel": "Overpaid",
+  "dashboardStockOverview": "Stock overview",
+  "dashboardStockSubtitle": "Units on hand across catalogue items",
+  "dashboardTotalUnits": "Total units",
+  "dashboardCatalogueLines": "Catalogue lines",
+  "dashboardStockOut": "Out of stock",
+  "dashboardStockLow": "Low (1–2)",
+  "dashboardStockOk": "In stock (3+)"
 }

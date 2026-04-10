@@ -914,7 +914,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final suppliersAsync = ref.watch(suppliersProvider);
     final inventoryAsync = ref.watch(inventoryItemsProvider);
 
+    // On tablet (e.g. iPad), avoid shrinking the body for the keyboard so the
+    // bottom notes/totals drawer stays at the screen bottom instead of jumping
+    // above the keyboard. Phones keep the default so fields can scroll clear.
+    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+    final isTabletLayout = shortestSide >= 600;
+
     return Scaffold(
+      resizeToAvoidBottomInset: !isTabletLayout,
       appBar: AppBar(
         title: Text(
           _isEdit

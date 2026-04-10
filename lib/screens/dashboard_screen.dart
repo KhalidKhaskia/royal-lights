@@ -19,6 +19,24 @@ class DashboardScreen extends ConsumerWidget {
     return fallback;
   }
 
+  /// Like [_t] but when ARB is missing/stale, uses [context] language — not English-only.
+  static String _tr(
+    BuildContext context,
+    AppLocalizations? l10n,
+    String key, {
+    required String en,
+    required String he,
+    required String ar,
+  }) {
+    final v = l10n?.tr(key);
+    if (v != null && v.isNotEmpty && v != key) return v;
+    return switch (Localizations.localeOf(context).languageCode) {
+      'he' => he,
+      'ar' => ar,
+      _ => en,
+    };
+  }
+
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   static bool _isOnOrAfter(DateTime? d, DateTime threshold) {
@@ -34,6 +52,7 @@ class DashboardScreen extends ConsumerWidget {
     final customersAsync = ref.watch(customersProvider);
     final fixingAsync = ref.watch(fixingTicketsProvider);
     final assembliesAsync = ref.watch(assemblyOrdersProvider);
+    final inventoryAsync = ref.watch(inventoryItemsProvider);
 
     final now = DateTime.now();
     final today = _dateOnly(now);
@@ -44,6 +63,20 @@ class DashboardScreen extends ConsumerWidget {
     final customers = customersAsync.value ?? const [];
     final tickets = fixingAsync.value ?? const [];
     final assemblies = assembliesAsync.value ?? const [];
+    final inventoryItems = inventoryAsync.value ?? const [];
+
+    final totalStockUnits = inventoryItems.fold<int>(
+      0,
+      (sum, item) => sum + item.availableStock,
+    );
+    final stockSkuCount = inventoryItems.length;
+    final stockOutCount =
+        inventoryItems.where((i) => i.availableStock == 0).length;
+    final stockLowCount = inventoryItems
+        .where((i) => i.availableStock > 0 && i.availableStock < 3)
+        .length;
+    final stockOkCount =
+        inventoryItems.where((i) => i.availableStock >= 3).length;
 
     final ordersToday =
         orders.where((o) => _isOnOrAfter(o.createdAt, today)).length;
@@ -297,7 +330,19 @@ class DashboardScreen extends ConsumerWidget {
                       l10n: l10n,
                     );
 
-                    // ── Row 4: quick actions + AI placeholder ─────────
+                    // ── Row 4: inventory / stock overview ───────────
+                    final stockRow = _StockCard(
+                      loading: inventoryAsync.isLoading,
+                      totalUnits: totalStockUnits,
+                      skuCount: stockSkuCount,
+                      outCount: stockOutCount,
+                      lowCount: stockLowCount,
+                      okCount: stockOkCount,
+                      onTap: () => go(7),
+                      l10n: l10n,
+                    );
+
+                    // ── Row 5: quick actions + AI placeholder ─────────
                     final actionsRow = _buildRow(gap, [
                       Expanded(
                         flex: 3,
@@ -317,6 +362,8 @@ class DashboardScreen extends ConsumerWidget {
                         statsRow,
                         const SizedBox(height: gap),
                         debtRow,
+                        const SizedBox(height: gap),
+                        stockRow,
                         const SizedBox(height: gap),
                         actionsRow,
                       ],
@@ -835,6 +882,349 @@ class _DebtBucket extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Stock overview (inventory)
+// ─────────────────────────────────────────────────────────────────
+class _StockCard extends StatelessWidget {
+  const _StockCard({
+    required this.loading,
+    required this.totalUnits,
+    required this.skuCount,
+    required this.outCount,
+    required this.lowCount,
+    required this.okCount,
+    required this.onTap,
+    required this.l10n,
+  });
+
+  final bool loading;
+  final int totalUnits;
+  final int skuCount;
+  final int outCount;
+  final int lowCount;
+  final int okCount;
+  final VoidCallback onTap;
+  final AppLocalizations? l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    String tr(
+      String key, {
+      required String en,
+      required String he,
+      required String ar,
+    }) =>
+        DashboardScreen._tr(context, l10n, key, en: en, he: he, ar: ar);
+
+    return Material(
+      color: AppTheme.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppTheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppTheme.secondary.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 18,
+                      color: AppTheme.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tr(
+                            'dashboardStockOverview',
+                            en: 'Stock overview',
+                            he: 'מצב מלאי',
+                            ar: 'نظرة عامة على المخزون',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          tr(
+                            'dashboardStockSubtitle',
+                            en: 'Units on hand across catalogue items',
+                            he: 'יחידות במלאי בכל פריטי הקטלוג',
+                            ar: 'الوحدات المتاحة عبر أصناف الكتالوج',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: AppTheme.outlineVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                height: 1,
+                color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 16),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StockHeadline(
+                        label: tr(
+                          'dashboardTotalUnits',
+                          en: 'Total units',
+                          he: 'סה״כ יחידות',
+                          ar: 'إجمالي الوحدات',
+                        ),
+                        value: loading ? null : totalUnits,
+                        color: AppTheme.secondary,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    Expanded(
+                      child: _StockHeadline(
+                        label: tr(
+                          'dashboardCatalogueLines',
+                          en: 'Catalogue lines',
+                          he: 'מספר פריטים',
+                          ar: 'عدد الأصناف',
+                        ),
+                        value: loading ? null : skuCount,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                height: 1,
+                color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 16),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StockBucket(
+                        title: tr(
+                          'dashboardStockOut',
+                          en: 'Out of stock',
+                          he: 'אזל מהמלאי',
+                          ar: 'نفد المخزون',
+                        ),
+                        count: loading ? null : outCount,
+                        color: AppTheme.error,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    Expanded(
+                      child: _StockBucket(
+                        title: tr(
+                          'dashboardStockLow',
+                          en: 'Low (1–2)',
+                          he: 'מלאי נמוך (1–2)',
+                          ar: 'مخزون منخفض (1–2)',
+                        ),
+                        count: loading ? null : lowCount,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.35),
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    Expanded(
+                      child: _StockBucket(
+                        title: tr(
+                          'dashboardStockOk',
+                          en: 'In stock (3+)',
+                          he: 'מלאי תקין (3+)',
+                          ar: 'مخزون جيد (3+)',
+                        ),
+                        count: loading ? null : okCount,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StockHeadline extends StatelessWidget {
+  const _StockHeadline({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int? value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.assistant(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        value == null
+            ? SizedBox(
+                height: 34,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    ),
+                  ),
+                ),
+              )
+            : Text(
+                NumberFormat.decimalPattern(
+                  Localizations.localeOf(context).toLanguageTag(),
+                ).format(value!),
+                style: GoogleFonts.assistant(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  height: 1,
+                ),
+              ),
+      ],
+    );
+  }
+}
+
+class _StockBucket extends StatelessWidget {
+  const _StockBucket({
+    required this.title,
+    required this.count,
+    required this.color,
+  });
+
+  final String title;
+  final int? count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 4,
+          height: 4,
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        count == null
+            ? SizedBox(
+                height: 30,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    ),
+                  ),
+                ),
+              )
+            : Text(
+                '$count',
+                style: GoogleFonts.assistant(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  height: 1,
+                ),
+              ),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.assistant(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.onSurfaceVariant,
+            height: 1.25,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Quick actions card
 // ─────────────────────────────────────────────────────────────────
 class _QuickActionsCard extends StatelessWidget {
@@ -852,6 +1242,7 @@ class _QuickActionsCard extends StatelessWidget {
       (Icons.add_shopping_cart_rounded, t('newOrder', 'New Order'), 2),
       (Icons.payment_rounded, t('newPayment', 'New Payment'), 4),
       (Icons.person_add_rounded, t('newCustomer', 'New Customer'), 1),
+      (Icons.inventory_2_outlined, t('inventory', 'Inventory'), 7),
       (Icons.build_circle_outlined, t('fixing', 'Fixing'), 3),
       (Icons.build_rounded, t('assemblies', 'Assemblies'), 5),
     ];

@@ -210,5 +210,12 @@
   "noPhone": "אין מספר טלפון זמין",
   "whatsappError": "לא ניתן לפתוח את WhatsApp",
   "balanceZeroLabel": "יתרת לתשלום",
-  "balanceOverpaidLabel": "עודף ששולם"
+  "balanceOverpaidLabel": "עודף ששולם",
+  "dashboardStockOverview": "מצב מלאי",
+  "dashboardStockSubtitle": "יחידות במלאי בכל פריטי הקטלוג",
+  "dashboardTotalUnits": "סה״כ יחידות",
+  "dashboardCatalogueLines": "מספר פריטים",
+  "dashboardStockOut": "אזל מהמלאי",
+  "dashboardStockLow": "מלאי נמוך (1–2)",
+  "dashboardStockOk": "מלאי תקין (3+)"
 }
