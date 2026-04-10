@@ -266,7 +266,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                           gridDelegate:
                               SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: cols,
-                            childAspectRatio: 0.92,
+                            // Slightly taller cells so two-column details + price row fit on iPad without overflow.
+                            childAspectRatio: 0.84,
                             crossAxisSpacing: 14,
                             mainAxisSpacing: 14,
                           ),
@@ -507,7 +508,7 @@ class _InventoryItemCard extends StatelessWidget {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
