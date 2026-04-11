@@ -1,5 +1,9 @@
+import 'secrets.dart';
+
 class SupabaseConfig {
-  static const String supabaseUrl = 'https://tuhhgptspaoxfwfzvtlf.supabase.co';
-  static const String supabaseAnonKey =
-      'sb_publishable_x8BNd7Cl7K-cjnC76eZu5g_-u6hqJas';
+  // ⚡ Flip this to switch between environments
+  static const bool isProduction = false; // true = PROD, false = TEST
+
+  static String get supabaseUrl => isProduction ? Secrets.prodSupabaseUrl : Secrets.testSupabaseUrl;
+  static String get supabaseAnonKey => isProduction ? Secrets.prodSupabaseKey : Secrets.testSupabaseKey;
 }
