@@ -277,7 +277,8 @@ class _AssemblyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = orderStatusColor(order.status);
-    final statusLabel = orderStatusLocalizedLabel(order.status, l10n);
+    final statusLabel =
+        orderStatusLocalizedLabel(order.status, l10n);
 
     final daysUntil = order.assemblyDate?.difference(DateTime.now()).inDays;
     final isUrgent = daysUntil != null && daysUntil <= 2;
@@ -302,13 +303,24 @@ class _AssemblyCard extends StatelessWidget {
             color: statusColor.withValues(alpha: 0.35),
           ),
         ),
-        child: Text(
-          statusLabel,
-          style: GoogleFonts.assistant(
-            color: statusColor,
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            orderStatusDot(statusColor, size: 8),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                statusLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.assistant(
+                  color: statusColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }

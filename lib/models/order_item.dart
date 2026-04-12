@@ -18,9 +18,15 @@ class OrderItem {
   /// Add-ons price per unit (scales with quantity).
   final double extrasPrice;
   final bool assemblyRequired; // 8. Assembly Required
-  final String? roomId; // 9. Room
+  final String? roomId; // 9. Room (legacy FK; optional when room_name is set)
+  /// Persisted free-text room (column `room_name`).
+  final String? roomLabel;
   final String? supplierId; // 10. Supplier
+  /// Planned or actual delivery / shipping date for this line.
+  final DateTime? deliveryDate;
   final bool existingInStore; // 11. Existing In Store
+  /// Confirmed received from supplier (partial order fulfillment).
+  final bool supplierReceived;
   /// 0 = none, 3 = three-year, 5 = five-year warranty.
   final int warrantyYears;
   /// When warranty starts counting (usually delivery date once it begins).
@@ -48,8 +54,11 @@ class OrderItem {
     this.extrasPrice = 0,
     this.assemblyRequired = false,
     this.roomId,
+    this.roomLabel,
     this.supplierId,
+    this.deliveryDate,
     this.existingInStore = false,
+    this.supplierReceived = false,
     this.warrantyYears = 0,
     this.warrantyStartDate,
     this.createdBy,
@@ -75,8 +84,13 @@ class OrderItem {
       extrasPrice: (json['extras_price'] as num?)?.toDouble() ?? 0,
       assemblyRequired: json['assembly_required'] as bool? ?? false,
       roomId: json['room_id'] as String?,
+      roomLabel: json['room_name'] as String?,
       supplierId: json['supplier_id'] as String?,
+      deliveryDate: json['delivery_date'] != null
+          ? DateTime.parse(json['delivery_date'] as String)
+          : null,
       existingInStore: json['existing_in_store'] as bool? ?? false,
+      supplierReceived: json['supplier_received'] as bool? ?? false,
       warrantyYears: _warrantyYearsFromJson(json['warranty_years']),
       warrantyStartDate: json['warranty_start_date'] != null
           ? DateTime.parse(json['warranty_start_date'] as String)
@@ -100,6 +114,7 @@ class OrderItem {
   }
 
   Map<String, dynamic> toJson() {
+    final roomLabelTrimmed = roomLabel?.trim();
     return {
       if (orderId != null) 'order_id': orderId,
       'item_number': itemNumber,
@@ -112,8 +127,14 @@ class OrderItem {
       'extras_price': extrasPrice,
       'assembly_required': assemblyRequired,
       'room_id': roomId,
+      'room_name':
+          (roomLabelTrimmed != null && roomLabelTrimmed.isNotEmpty)
+              ? roomLabelTrimmed
+              : null,
       'supplier_id': supplierId,
+      'delivery_date': deliveryDate?.toIso8601String().split('T').first,
       'existing_in_store': existingInStore,
+      'supplier_received': supplierReceived || existingInStore,
       'warranty_years': warrantyYears,
       'warranty_start_date': warrantyStartDate?.toIso8601String().split('T').first,
       'created_by': createdBy,
@@ -134,8 +155,11 @@ class OrderItem {
     double? extrasPrice,
     bool? assemblyRequired,
     String? roomId,
+    String? roomLabel,
     String? supplierId,
+    DateTime? deliveryDate,
     bool? existingInStore,
+    bool? supplierReceived,
     int? warrantyYears,
     DateTime? warrantyStartDate,
     String? createdBy,
@@ -154,8 +178,11 @@ class OrderItem {
       extrasPrice: extrasPrice ?? this.extrasPrice,
       assemblyRequired: assemblyRequired ?? this.assemblyRequired,
       roomId: roomId ?? this.roomId,
+      roomLabel: roomLabel ?? this.roomLabel,
       supplierId: supplierId ?? this.supplierId,
+      deliveryDate: deliveryDate ?? this.deliveryDate,
       existingInStore: existingInStore ?? this.existingInStore,
+      supplierReceived: supplierReceived ?? this.supplierReceived,
       warrantyYears: warrantyYears ?? this.warrantyYears,
       warrantyStartDate: warrantyStartDate ?? this.warrantyStartDate,
       createdBy: createdBy ?? this.createdBy,

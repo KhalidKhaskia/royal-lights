@@ -9,6 +9,14 @@ import '../../providers/providers.dart';
 import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/editorial_screen_title.dart';
 
+/// Singular "agent" label; Hebrew is fixed so stale ARB assets cannot show "ספק".
+String _agentSingularLabel(BuildContext context, AppLocalizations? l10n) {
+  if (Localizations.localeOf(context).languageCode == 'he') return 'סוכן';
+  final t = l10n?.tr('supplier');
+  if (t != null && t.isNotEmpty && t != 'supplier') return t;
+  return 'Supplier';
+}
+
 class SuppliersScreen extends ConsumerStatefulWidget {
   const SuppliersScreen({super.key});
 
@@ -34,15 +42,34 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
   }
 
   String _suppliersSearchFieldLabel() {
+    final lang = Localizations.localeOf(context).languageCode;
+    if (lang == 'he') {
+      return 'חיפוש סוכנים לפי חברה, איש קשר, טלפון…';
+    }
     final l10n = AppLocalizations.of(context);
     final t = l10n?.tr('searchSuppliersHint');
     if (t != null && t.isNotEmpty && t != 'searchSuppliersHint') return t;
-    return switch (Localizations.localeOf(context).languageCode) {
+    return switch (lang) {
       'ar' => 'ابحث بالشركة، جهة الاتصال، الهاتف…',
-      'en' => 'Search by company, contact, phone…',
-      _ => 'חיפוש סוכנים לפי חברה, איש קשר, טלפון…',
+      _ => 'Search by company, contact, phone…',
     };
   }
+
+  String _suppliersPageTitle(AppLocalizations? l10n) {
+    if (Localizations.localeOf(context).languageCode == 'he') return 'סוכנים';
+    final t = l10n?.tr('suppliers');
+    if (t != null && t.isNotEmpty && t != 'suppliers') return t;
+    return 'Suppliers';
+  }
+
+  String _newSupplierHeading(AppLocalizations? l10n) {
+    if (Localizations.localeOf(context).languageCode == 'he') return 'סוכן חדש';
+    final t = l10n?.tr('newSupplier');
+    if (t != null && t.isNotEmpty && t != 'newSupplier') return t;
+    return 'New Supplier';
+  }
+
+  String _fabNewSupplierTooltip(AppLocalizations? l10n) => _newSupplierHeading(l10n);
 
   @override
   Widget build(BuildContext context) {
@@ -62,14 +89,14 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
         foregroundColor: AppTheme.onPrimary,
         elevation: 2,
         onPressed: () => _showSupplierDialog(context, ref, l10n),
-        tooltip: l10n?.tr('newSupplier') ?? 'New Supplier',
+        tooltip: _fabNewSupplierTooltip(l10n),
         child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           EditorialScreenTitle(
-            title: l10n?.tr('suppliers') ?? 'Suppliers',
+            title: _suppliersPageTitle(l10n),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -261,8 +288,8 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
               children: [
                 Text(
                   supplier != null
-                      ? (l10n?.tr('edit') ?? 'Edit Supplier')
-                      : (l10n?.tr('newSupplier') ?? 'New Supplier'),
+                      ? (l10n?.tr('edit') ?? 'Edit')
+                      : _newSupplierHeading(l10n),
                   style: GoogleFonts.assistant(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
@@ -614,7 +641,7 @@ class _SupplierCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                l10n?.tr('supplier') ?? 'סוכן',
+                                _agentSingularLabel(context, l10n),
                                 style: GoogleFonts.assistant(
                                   color: AppTheme.secondary,
                                   fontSize: 12,
@@ -692,9 +719,7 @@ class _SupplierCard extends StatelessWidget {
                             child: FittedBox(
                               fit: BoxFit.scaleDown,
                               child: Text(
-                                (phone == '-')
-                                    ? (l10n?.tr('supplier') ?? 'סוכן')
-                                    : (l10n?.tr('supplier') ?? 'סוכן'),
+                                _agentSingularLabel(context, l10n),
                                 style: GoogleFonts.assistant(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,

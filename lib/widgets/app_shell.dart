@@ -24,7 +24,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   int? _prevIndex;
   bool _sidebarCollapsed = false;
 
-  /// When ARB is stale, [AppLocalizations.tr] returns the key — treat as missing.
+  /// Sidebar labels: for Hebrew/Arabic, always use the explicit [he]/[ar] strings.
+  /// Otherwise a stale cached `app_*.arb` asset (common on Flutter web) can still
+  /// return old translations from [AppLocalizations.tr] and override the UI.
   String _l10nOrLocale(
     BuildContext context,
     AppLocalizations? l10n,
@@ -33,13 +35,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     required String he,
     required String ar,
   }) {
+    final lang = Localizations.localeOf(context).languageCode;
+    if (lang == 'he') return he;
+    if (lang == 'ar') return ar;
     final t = l10n?.tr(key) ?? '';
     if (t.isNotEmpty && t != key) return t;
-    return switch (Localizations.localeOf(context).languageCode) {
-      'he' => he,
-      'ar' => ar,
-      _ => en,
-    };
+    return en;
   }
 
   @override
@@ -138,7 +139,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           l10n,
           'suppliers',
           en: 'Suppliers',
-          he: 'ספקים',
+          he: 'סוכנים',
           ar: 'الموردون',
         ),
       ),
@@ -307,7 +308,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                         child: Text(
                                           navItems[index].label,
                                           key: ValueKey(
-                                            'nav_label_${index}_${locale.languageCode}',
+                                            'nav_label_${index}_${navItems[index].label}',
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                           style: labelStyle,
