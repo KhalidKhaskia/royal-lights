@@ -34,7 +34,8 @@ extension OrderStatusExtension on OrderStatus {
   }
 
   static OrderStatus fromString(String value) {
-    switch (value) {
+    final v = value.trim();
+    switch (v) {
       case 'Active':
         return OrderStatus.active;
       case 'Preparing':
@@ -52,6 +53,18 @@ extension OrderStatusExtension on OrderStatus {
       case 'Canceled':
         return OrderStatus.canceled;
       default:
+        // Avoid collapsing unknown DB values to Active (hides real workflow).
+        final lower = v.toLowerCase();
+        if (lower == 'preparing') return OrderStatus.preparing;
+        if (lower == 'sent to supplier') return OrderStatus.sentToSupplier;
+        if (lower == 'in assembly') return OrderStatus.inAssembly;
+        if (lower == 'awaiting shipping') return OrderStatus.awaitingShipping;
+        if (lower == 'handled') return OrderStatus.handled;
+        if (lower == 'delivered') return OrderStatus.delivered;
+        if (lower == 'canceled' || lower == 'cancelled') {
+          return OrderStatus.canceled;
+        }
+        if (lower == 'active') return OrderStatus.active;
         return OrderStatus.active;
     }
   }

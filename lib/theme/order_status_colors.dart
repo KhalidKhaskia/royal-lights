@@ -24,15 +24,16 @@ String _trOrLocaleFallback(
   }
 }
 
-/// Single palette for order statuses (Notion-style color dots / pills).
+/// Single palette for order statuses — one distinct hue per [OrderStatus] so
+/// table pills, filter dots, and dropdowns stay visually aligned.
 Color orderStatusColor(OrderStatus status) {
   switch (status) {
     case OrderStatus.active:
       return const Color(0xFF0F7B6C);
     case OrderStatus.preparing:
-      return const Color(0xFF2383E2);
+      return const Color(0xFF2563EB);
     case OrderStatus.sentToSupplier:
-      return const Color(0xFF2383E2);
+      return const Color(0xFF38BDF8);
     case OrderStatus.inAssembly:
       return const Color(0xFFE09700);
     case OrderStatus.awaitingShipping:
@@ -69,7 +70,7 @@ String orderStatusLocalizedLabel(OrderStatus status, AppLocalizations? l10n) {
         l10n,
         'sentToSupplier',
         en: 'Sent to supplier',
-        he: 'נשלח לספק',
+        he: 'נשלח לסוכן',
         ar: 'تم الإرسال للمورد',
       );
     case OrderStatus.inAssembly:
@@ -84,9 +85,9 @@ String orderStatusLocalizedLabel(OrderStatus status, AppLocalizations? l10n) {
       return _trOrLocaleFallback(
         l10n,
         'awaitingShipping',
-        en: 'Awaiting Shipping',
-        he: 'ממתין להרכבה',
-        ar: 'في انتظار الشحن',
+        en: 'Ready for pickup',
+        he: 'מוכן לאיסוף',
+        ar: 'جاهز للاستلام',
       );
     case OrderStatus.handled:
       return _trOrLocaleFallback(

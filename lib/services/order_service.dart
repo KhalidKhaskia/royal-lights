@@ -9,7 +9,10 @@ class OrderService {
   Future<List<Order>> getAll() async {
     final data = await _client
         .from('orders')
-        .select('*, customers(card_name, customer_name)')
+        .select(
+          '*, customers(card_name, customer_name), '
+          'order_items(*, rooms(name), suppliers(company_name, phone))',
+        )
         .order('created_at', ascending: false);
     return (data as List).map((e) => Order.fromJson(e)).toList();
   }
@@ -17,7 +20,10 @@ class OrderService {
   Future<List<Order>> getByCustomer(String customerId) async {
     final data = await _client
         .from('orders')
-        .select('*, customers(card_name, customer_name)')
+        .select(
+          '*, customers(card_name, customer_name), '
+          'order_items(*, rooms(name), suppliers(company_name, phone))',
+        )
         .eq('customer_id', customerId)
         .order('created_at', ascending: false);
     return (data as List).map((e) => Order.fromJson(e)).toList();
@@ -93,6 +99,19 @@ class OrderService {
         .eq('id', id);
   }
 
+  /// Marks line items as received from supplier (workflow). [itemIds] are order_items.id.
+  Future<void> markItemsSupplierReceived(
+    Iterable<String> itemIds,
+    String username,
+  ) async {
+    final ids = itemIds.where((e) => e.isNotEmpty).toList();
+    if (ids.isEmpty) return;
+    await _client.from('order_items').update({
+      'supplier_received': true,
+      'updated_by': username,
+    }).inFilter('id', ids);
+  }
+
   /// Starts warranty counting for order items (if not started yet).
   ///
   /// Rule:
@@ -138,6 +157,12 @@ class OrderService {
         .from('orders')
         .update({'status': 'Canceled', 'updated_by': username})
         .eq('id', id);
+  }
+
+  /// Permanently removes the order. [order_items] are removed by ON DELETE CASCADE;
+  /// payments referencing this order are unlinked (ON DELETE SET NULL).
+  Future<void> deleteOrder(String id) async {
+    await _client.from('orders').delete().eq('id', id);
   }
 
   Future<void> updateItems(

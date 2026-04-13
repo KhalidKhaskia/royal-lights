@@ -57,7 +57,9 @@ class DashboardScreen extends ConsumerWidget {
     final now = DateTime.now();
     final today = _dateOnly(now);
     final weekStart = today.subtract(const Duration(days: 6));
-    final dateLabel = DateFormat('EEEE, d MMMM y').format(now);
+    final localeName = Localizations.localeOf(context).toString();
+    final dateLabel =
+        DateFormat('EEEE, d MMMM y', localeName).format(now);
 
     final orders = ordersAsync.value ?? const [];
     final customers = customersAsync.value ?? const [];
@@ -288,7 +290,7 @@ class DashboardScreen extends ConsumerWidget {
                           title: _t(
                             l10n,
                             'awaitingShipping',
-                            'Sent for installation',
+                            'Ready for pickup',
                           ),
                           label: _t(l10n, 'status', 'Status'),
                           value: loading ? null : awaitingShippingCount,

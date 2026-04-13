@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   assembly_required BOOLEAN NOT NULL DEFAULT FALSE, -- 8. Assembly Required
   room_id UUID REFERENCES rooms(id) ON DELETE SET NULL, -- 9. Room dropdown
   supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL, -- 10. Supplier dropdown
+  delivery_date DATE, -- per-line shipping / delivery (optional)
   existing_in_store BOOLEAN NOT NULL DEFAULT TRUE, -- 11. Existing In Store
   warranty_years INTEGER NOT NULL DEFAULT 0, -- 0 = none, 3 or 5 = years
   warranty_start_date DATE, -- when warranty starts counting (usually delivery date)
