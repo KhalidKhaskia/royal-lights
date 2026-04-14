@@ -240,6 +240,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               : (item.roomName ?? '');
           row.supplierId = item.supplierId;
           row.existingInStore = item.existingInStore;
+          row.inventoryItemId = item.inventoryItemId;
           row.warrantyYears = item.warrantyYears;
           row.imageUrl = item.imageUrl;
           row.deliveryDate = item.deliveryDate ?? order.deliveryDate;
@@ -511,6 +512,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
       setState(() {
         _markDirty();
+        row.inventoryItemId = picked.id;
         // Auto-assign fields from inventory.
         row.nameCtrl.text = picked.description;
         row.itemNumberCtrl.text = picked.barcode ?? '';
@@ -549,6 +551,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   void _applyInventoryToRow(_ItemRow row, InventoryItem picked) {
     // Auto-assign fields from inventory.
+    row.inventoryItemId = picked.id;
     row.nameCtrl.text = picked.description;
     row.itemNumberCtrl.text = picked.barcode ?? '';
     if (picked.consumerPrice != null) {
@@ -2777,6 +2780,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           supplierId: item.supplierId,
           deliveryDate: item.deliveryDate,
           existingInStore: item.existingInStore,
+          inventoryItemId: item.inventoryItemId,
           warrantyYears: item.warrantyYears,
           createdBy: username,
           updatedBy: username,
@@ -2989,6 +2993,7 @@ class _ItemRow {
   final roomCtrl = TextEditingController();
   bool assemblyRequired = false;
   String? supplierId;
+  String? inventoryItemId;
   DateTime? deliveryDate;
   bool existingInStore = false;
   int warrantyYears = 0;

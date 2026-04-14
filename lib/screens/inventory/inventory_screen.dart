@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/inventory_item.dart';
+import '../../models/supplier.dart';
 import '../../providers/providers.dart';
 import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/app_dropdown_styles.dart';
@@ -26,6 +28,14 @@ class InventoryScreen extends ConsumerStatefulWidget {
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   final _searchCtrl = TextEditingController();
+  bool _fabExpanded = false;
+
+  void _toggleFab() => setState(() => _fabExpanded = !_fabExpanded);
+
+  void _closeFab() {
+    if (!_fabExpanded) return;
+    setState(() => _fabExpanded = false);
+  }
 
   int _gridCols(double width) {
     const minTileWidth = 185.0;
@@ -84,11 +94,926 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     );
   }
 
+  Future<void> _openRefillStockDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations? l10n,
+    List<InventoryItem> items,
+  ) async {
+    InventoryItem? selected;
+    final amountCtrl = TextEditingController(text: '1');
+    final selectedCtrl = TextEditingController();
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final mq = MediaQuery.sizeOf(ctx);
+          return Dialog(
+            backgroundColor: AppTheme.surfaceContainerLowest,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: AppTheme.outlineVariant.withValues(alpha: 0.45),
+              ),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: (mq.width - 32).clamp(360.0, 720.0),
+                maxHeight: (mq.height * 0.86).clamp(340.0, 720.0),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+                child: StatefulBuilder(
+                  builder: (context, setLocal) {
+                    final enable = selected != null &&
+                        (int.tryParse(amountCtrl.text.trim()) ?? 0) > 0;
+                    final targetH =
+                        (mq.height * 0.9).clamp(460.0, 860.0).toDouble();
+                    return SizedBox(
+                      height: targetH,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.max,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                        Row(
+                          children: [
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppTheme.secondaryContainer
+                                    .withValues(alpha: 0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.all(10),
+                                child: Icon(
+                                  Icons.inventory_2_rounded,
+                                  color: AppTheme.secondary,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _trOrLocale(
+                                  context,
+                                  l10n,
+                                  'refillStockTitle',
+                                  en: 'Refill stock',
+                                  he: 'מילוי מלאי',
+                                  ar: 'تعبئة المخزون',
+                                ),
+                                style: GoogleFonts.assistant(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: l10n?.tr('close') ?? 'Close',
+                              onPressed: () => Navigator.pop(ctx, false),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Autocomplete<InventoryItem>(
+                          optionsBuilder: (value) {
+                            final q = value.text.trim().toLowerCase();
+                            if (q.isEmpty) return const Iterable<InventoryItem>.empty();
+                            return items.where((it) {
+                              final desc = it.description.toLowerCase();
+                              final brand = (it.brand ?? '').toLowerCase();
+                              final barcode = (it.barcode ?? '').toLowerCase();
+                              return desc.contains(q) ||
+                                  brand.contains(q) ||
+                                  barcode.contains(q);
+                            }).take(20);
+                          },
+                          displayStringForOption: (it) => it.description,
+                          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                            controller.text = selectedCtrl.text;
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              style: GoogleFonts.assistant(),
+                              decoration: InputDecoration(
+                                labelText: _trOrLocale(
+                                  context,
+                                  l10n,
+                                  'refillStockSelectItem',
+                                  en: 'Select item',
+                                  he: 'בחר פריט',
+                                  ar: 'اختر عنصرًا',
+                                ),
+                                prefixIcon: const Icon(Icons.search_rounded),
+                                filled: true,
+                                fillColor: AppTheme.surfaceContainerLow,
+                              ),
+                              onChanged: (_) {
+                                setLocal(() {
+                                  selected = null;
+                                  selectedCtrl.text = controller.text;
+                                });
+                              },
+                            );
+                          },
+                          onSelected: (it) {
+                            setLocal(() {
+                              selected = it;
+                              selectedCtrl.text = it.description;
+                            });
+                          },
+                          optionsViewBuilder: (context, onSelected, opts) {
+                            return Align(
+                              alignment: AlignmentDirectional.topStart,
+                              child: Material(
+                                color: AppTheme.surfaceContainerLowest,
+                                elevation: 8,
+                                shadowColor: Colors.black.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight: 360,
+                                    maxWidth: (mq.width - 40).clamp(340.0, 680.0),
+                                  ),
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    shrinkWrap: true,
+                                    itemCount: opts.length,
+                                    separatorBuilder: (_, __) => Divider(
+                                      height: 1,
+                                      color: AppTheme.outlineVariant.withValues(alpha: 0.4),
+                                    ),
+                                    itemBuilder: (context, i) {
+                                      final it = opts.elementAt(i);
+                                      final hasPhoto = it.imageUrl != null &&
+                                          it.imageUrl!.trim().isNotEmpty;
+                                      return ListTile(
+                                        dense: true,
+                                        leading: ClipRRect(
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Container(
+                                            width: 46,
+                                            height: 46,
+                                            color: AppTheme.surfaceContainerHighest
+                                                .withValues(alpha: 0.45),
+                                            child: hasPhoto
+                                                ? CachedNetworkImage(
+                                                    imageUrl: it.imageUrl!,
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                : Icon(
+                                                    Icons.image_outlined,
+                                                    color: AppTheme.outlineVariant,
+                                                    size: 22,
+                                                  ),
+                                          ),
+                                        ),
+                                        title: Text(
+                                          it.description,
+                                          style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        subtitle: Text(
+                                          '${_trOrLocale(context, l10n, 'availableStock', en: 'In stock', he: 'מלאי זמין', ar: 'متوفر')}: ${it.availableStock}',
+                                          style: GoogleFonts.assistant(fontSize: 12, color: AppTheme.onSurfaceVariant),
+                                        ),
+                                        onTap: () => onSelected(it),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: amountCtrl,
+                                keyboardType: TextInputType.number,
+                                style: GoogleFonts.assistant(),
+                                decoration: InputDecoration(
+                                  labelText: _trOrLocale(
+                                    context,
+                                    l10n,
+                                    'refillStockAmount',
+                                    en: 'Add units',
+                                    he: 'הוסף יחידות',
+                                    ar: 'أضف وحدات',
+                                  ),
+                                  filled: true,
+                                  fillColor: AppTheme.surfaceContainerLow,
+                                ),
+                                onChanged: (_) => setLocal(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            if (selected != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.secondaryContainer.withValues(alpha: 0.35),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppTheme.secondary.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Text(
+                                  '+${int.tryParse(amountCtrl.text.trim()) ?? 0}',
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.secondary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: Text(_trOrLocale(
+                                context,
+                                l10n,
+                                'cancel',
+                                en: 'Cancel',
+                                he: 'ביטול',
+                                ar: 'إلغاء',
+                              )),
+                            ),
+                            const Spacer(),
+                            FilledButton(
+                              onPressed: enable ? () => Navigator.pop(ctx, true) : null,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.secondary,
+                                foregroundColor: AppTheme.onSecondary,
+                                disabledBackgroundColor:
+                                    AppTheme.secondary.withValues(alpha: 0.35),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                _trOrLocale(
+                                  context,
+                                  l10n,
+                                  'refillStockConfirm',
+                                  en: 'Add to stock',
+                                  he: 'הוסף למלאי',
+                                  ar: 'إضافة للمخزون',
+                                ),
+                                style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      if (ok != true || !mounted || selected == null) return;
+      final add = int.tryParse(amountCtrl.text.trim()) ?? 0;
+      if (add <= 0) return;
+      await ref.read(inventoryServiceProvider).update(
+            selected!.id,
+            {'available_stock': selected!.availableStock + add},
+          );
+      ref.invalidate(inventoryItemsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(
+          content: Text(l10n?.tr('success') ?? 'Success'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      amountCtrl.dispose();
+      selectedCtrl.dispose();
+    }
+  }
+
+  Future<void> _openWhatsAppToPhone(String rawPhone, String message) async {
+    final phone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (phone.isEmpty) return;
+    final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  String _supplierStockOrderMessage(
+    BuildContext context,
+    AppLocalizations? l10n,
+    Supplier supplier,
+    List<({InventoryItem item, int qty})> lines,
+  ) {
+    final lang = Localizations.localeOf(context).languageCode;
+    final header = switch (lang) {
+      'en' => 'Stock order request',
+      'ar' => 'طلب تزويد مخزون',
+      _ => 'בקשה להזמנת מלאי',
+    };
+    final intro = switch (lang) {
+      'en' => 'Hello ${supplier.companyName}, please supply:',
+      'ar' => 'مرحبًا ${supplier.companyName}، نرجو توفير:',
+      _ => 'שלום ${supplier.companyName}, אשמח להזמין:',
+    };
+    final body = lines.map((l) {
+      final code = (l.item.barcode ?? '').trim();
+      final codePart = code.isNotEmpty ? '($code) ' : '';
+      return '$codePart${l.item.description}\n×${l.qty}';
+    }).join('\n\n');
+    final outro = switch (lang) {
+      'en' => 'Please confirm availability and ETA.',
+      'ar' => 'يرجى تأكيد التوفر وموعد التسليم.',
+      _ => 'נא לאשר זמינות וזמן אספקה.',
+    };
+    return '$header\n\n$intro\n\n$body\n\n$outro';
+  }
+
+  Future<void> _openOrderStockDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations? l10n,
+    List<Supplier> suppliers,
+    List<InventoryItem> items,
+  ) async {
+    Supplier? selectedSupplier;
+    var filter = 'all'; // all | low | out
+    final qtyByItemId = <String, TextEditingController>{};
+
+    List<InventoryItem> itemsForSupplier() {
+      final sid = selectedSupplier?.id;
+      if (sid == null) return <InventoryItem>[];
+      final list = items.where((i) => i.supplierId == sid).toList(growable: true);
+      list.sort((a, b) =>
+          a.description.toLowerCase().compareTo(b.description.toLowerCase()));
+      return list;
+    }
+
+    TextEditingController qtyCtrl(String itemId) =>
+        qtyByItemId.putIfAbsent(itemId, () => TextEditingController(text: '0'));
+
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final mq = MediaQuery.sizeOf(ctx);
+          return Dialog(
+            backgroundColor: AppTheme.surfaceContainerLowest,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: AppTheme.outlineVariant.withValues(alpha: 0.45),
+              ),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: (mq.width - 24).clamp(380.0, 980.0),
+                maxHeight: (mq.height * 0.9).clamp(460.0, 860.0),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+                child: StatefulBuilder(
+                  builder: (dialogContext, setLocal) {
+                    const lowStockThreshold = 2;
+                    var itemList = itemsForSupplier();
+                    if (filter == 'out') {
+                      itemList = itemList.where((i) => i.availableStock == 0).toList();
+                    } else if (filter == 'low') {
+                      itemList = itemList
+                          .where((i) => i.availableStock <= lowStockThreshold)
+                          .toList();
+                    }
+                    itemList.sort((a, b) {
+                      final aLow = a.availableStock <= lowStockThreshold ? 0 : 1;
+                      final bLow = b.availableStock <= lowStockThreshold ? 0 : 1;
+                      final c = aLow.compareTo(bLow);
+                      if (c != 0) return c;
+                      return a.description
+                          .toLowerCase()
+                          .compareTo(b.description.toLowerCase());
+                    });
+                    final selectedLines = <({InventoryItem item, int qty})>[];
+                    for (final it in itemList) {
+                      final qty = int.tryParse(qtyCtrl(it.id).text.trim()) ?? 0;
+                      if (qty > 0) selectedLines.add((item: it, qty: qty));
+                    }
+                    final canSend = selectedSupplier != null &&
+                        selectedSupplier!.phone != null &&
+                        selectedSupplier!.phone!.trim().isNotEmpty &&
+                        selectedLines.isNotEmpty;
+
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppTheme.secondaryContainer
+                                    .withValues(alpha: 0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.all(10),
+                                child: Icon(
+                                  Icons.local_shipping_rounded,
+                                  color: AppTheme.secondary,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _trOrLocale(
+                                  dialogContext,
+                                  l10n,
+                                  'orderStockTitle',
+                                  en: 'Order stock from supplier',
+                                  he: 'הזמנת מלאי מסוכן',
+                                  ar: 'طلب مخزون من المورد',
+                                ),
+                                style: GoogleFonts.assistant(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: l10n?.tr('close') ?? 'Close',
+                              onPressed: () => Navigator.pop(ctx, false),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            return DropdownMenu<Supplier>(
+                              width: constraints.maxWidth,
+                              expandedInsets: EdgeInsets.zero,
+                              enableFilter: true,
+                              enableSearch: true,
+                              menuHeight: 320,
+                              leadingIcon:
+                                  const Icon(Icons.storefront_rounded),
+                              initialSelection: selectedSupplier,
+                              onSelected: (s) =>
+                                  setLocal(() => selectedSupplier = s),
+                              menuStyle: appDropdownMenuStyle(),
+                              inputDecorationTheme:
+                                  appDropdownInputDecorationTheme().copyWith(
+                                fillColor: AppTheme.surfaceContainerLow,
+                              ),
+                              textStyle: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.onSurface,
+                              ),
+                              label: Text(
+                                _trOrLocale(
+                                  dialogContext,
+                                  l10n,
+                                  'orderStockSelectSupplier',
+                                  en: 'Supplier',
+                                  he: 'סוכן',
+                                  ar: 'المورد',
+                                ),
+                                style: GoogleFonts.assistant(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              dropdownMenuEntries: suppliers.map((s) {
+                                return DropdownMenuEntry<Supplier>(
+                                  value: s,
+                                  label: s.companyName,
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (selectedSupplier != null)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ChoiceChip(
+                                selected: filter == 'all',
+                                label: Text(
+                                  _trOrLocale(
+                                    dialogContext,
+                                    l10n,
+                                    'orderStockFilterAll',
+                                    en: 'All',
+                                    he: 'הכל',
+                                    ar: 'الكل',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                onSelected: (_) => setLocal(() => filter = 'all'),
+                              ),
+                              ChoiceChip(
+                                selected: filter == 'low',
+                                label: Text(
+                                  _trOrLocale(
+                                    dialogContext,
+                                    l10n,
+                                    'orderStockFilterLow',
+                                    en: 'Low stock',
+                                    he: 'מלאי נמוך',
+                                    ar: 'مخزون منخفض',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                onSelected: (_) => setLocal(() => filter = 'low'),
+                              ),
+                              ChoiceChip(
+                                selected: filter == 'out',
+                                label: Text(
+                                  _trOrLocale(
+                                    dialogContext,
+                                    l10n,
+                                    'orderStockFilterOut',
+                                    en: 'Out of stock',
+                                    he: 'חסר במלאי',
+                                    ar: 'نفد المخزون',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                onSelected: (_) => setLocal(() => filter = 'out'),
+                              ),
+                            ],
+                          ),
+                        if (selectedSupplier != null) const SizedBox(height: 12),
+                        Expanded(
+                          child: selectedSupplier == null
+                              ? Center(
+                                  child: Text(
+                                    _trOrLocale(
+                                      dialogContext,
+                                      l10n,
+                                      'orderStockPickSupplierHint',
+                                      en: 'Select a supplier to see its items.',
+                                      he: 'בחר סוכן כדי לראות את הפריטים שלו.',
+                                      ar: 'اختر موردًا لعرض عناصره.',
+                                    ),
+                                    style: GoogleFonts.assistant(
+                                      color: AppTheme.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                              : (itemList.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        _trOrLocale(
+                                          dialogContext,
+                                          l10n,
+                                          'orderStockNoItemsForSupplier',
+                                          en:
+                                              'No inventory items are linked to this supplier.',
+                                          he:
+                                              'אין פריטי מלאי שמשויכים לסוכן הזה.',
+                                          ar:
+                                              'لا توجد عناصر مخزون مرتبطة بهذا المورد.',
+                                        ),
+                                        style: GoogleFonts.assistant(
+                                          color: AppTheme.onSurfaceVariant,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    )
+                                  : LayoutBuilder(
+                                      builder: (context, c) {
+                                        final cols = c.maxWidth >= 860 ? 2 : 1;
+                                        return GridView.builder(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          gridDelegate:
+                                              SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: cols,
+                                            crossAxisSpacing: 12,
+                                            mainAxisSpacing: 12,
+                                            childAspectRatio:
+                                                cols == 1 ? 3.6 : 3.2,
+                                          ),
+                                          itemCount: itemList.length,
+                                          itemBuilder: (context, i) {
+                                            final it = itemList[i];
+                                            final hasPhoto = it.imageUrl !=
+                                                    null &&
+                                                it.imageUrl!
+                                                    .trim()
+                                                    .isNotEmpty;
+                                            final ctrl = qtyCtrl(it.id);
+                                            final stock = it.availableStock;
+                                            final stockColor = stock == 0
+                                                ? AppTheme.error
+                                                : (stock <= lowStockThreshold
+                                                    ? AppTheme.warning
+                                                    : AppTheme
+                                                        .onSurfaceVariant);
+                                            final stockBg = stock == 0
+                                                ? AppTheme.error
+                                                    .withValues(alpha: 0.08)
+                                                : (stock <= lowStockThreshold
+                                                    ? AppTheme.warning
+                                                        .withValues(
+                                                            alpha: 0.10)
+                                                    : AppTheme
+                                                        .surfaceContainerHighest
+                                                        .withValues(
+                                                            alpha: 0.45));
+
+                                            return DecoratedBox(
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    AppTheme.surfaceContainerLow,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: AppTheme.outlineVariant
+                                                      .withValues(alpha: 0.35),
+                                                ),
+                                              ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.all(12),
+                                                child: Row(
+                                                  children: [
+                                                    ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              14),
+                                                      child: Container(
+                                                        width: 64,
+                                                        height: 64,
+                                                        color: AppTheme
+                                                            .surfaceContainerHighest
+                                                            .withValues(
+                                                                alpha: 0.45),
+                                                        child: hasPhoto
+                                                            ? CachedNetworkImage(
+                                                                imageUrl: it
+                                                                    .imageUrl!,
+                                                                fit: BoxFit
+                                                                    .cover,
+                                                              )
+                                                            : Icon(
+                                                                Icons
+                                                                    .image_outlined,
+                                                                color: AppTheme
+                                                                    .outlineVariant,
+                                                                size: 22,
+                                                              ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              Expanded(
+                                                                child: Text(
+                                                                  it.description,
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  style: GoogleFonts
+                                                                      .assistant(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w800,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 8),
+                                                              Container(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal:
+                                                                      10,
+                                                                  vertical: 6,
+                                                                ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: stockBg,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              999),
+                                                                  border:
+                                                                      Border.all(
+                                                                    color: stockColor
+                                                                        .withValues(
+                                                                            alpha:
+                                                                                0.28),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  '${_trOrLocale(dialogContext, l10n, 'availableStock', en: 'In stock', he: 'מלאי זמין', ar: 'متوفر')}: $stock',
+                                                                  style: GoogleFonts
+                                                                      .assistant(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w800,
+                                                                    fontSize:
+                                                                        11.5,
+                                                                    color:
+                                                                        stockColor,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          const SizedBox(
+                                                              height: 6),
+                                                          Text(
+                                                            [
+                                                              if ((it.barcode ??
+                                                                      '')
+                                                                  .trim()
+                                                                  .isNotEmpty)
+                                                                '${_trOrLocale(dialogContext, l10n, 'barcode', en: 'Barcode', he: 'ברקוד', ar: 'باركוד')}: ${it.barcode}',
+                                                            ].join(' · '),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: GoogleFonts
+                                                                .assistant(
+                                                              fontSize: 12,
+                                                              color: AppTheme
+                                                                  .onSurfaceVariant,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    SizedBox(
+                                                      width: 96,
+                                                      child: TextField(
+                                                        controller: ctrl,
+                                                        keyboardType:
+                                                            TextInputType
+                                                                .number,
+                                                        style:
+                                                            GoogleFonts.assistant(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                        ),
+                                                        decoration:
+                                                            InputDecoration(
+                                                          labelText: _trOrLocale(
+                                                            dialogContext,
+                                                            l10n,
+                                                            'quantity',
+                                                            en: 'Qty',
+                                                            he: 'כמות',
+                                                            ar: 'الكمية',
+                                                          ),
+                                                          filled: true,
+                                                          fillColor:
+                                                              Colors.white,
+                                                        ),
+                                                        onChanged: (_) =>
+                                                            setLocal(() {}),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    )),
+                        ),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: Text(_trOrLocale(
+                                dialogContext,
+                                l10n,
+                                'cancel',
+                                en: 'Cancel',
+                                he: 'ביטול',
+                                ar: 'إلغاء',
+                              )),
+                            ),
+                            const Spacer(),
+                            FilledButton(
+                              onPressed: canSend ? () => Navigator.pop(ctx, true) : null,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.secondary,
+                                foregroundColor: AppTheme.onSecondary,
+                                disabledBackgroundColor:
+                                    AppTheme.secondary.withValues(alpha: 0.35),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                _trOrLocale(
+                                  dialogContext,
+                                  l10n,
+                                  'orderStockSend',
+                                  en: 'Send to supplier',
+                                  he: 'שלח לסוכן',
+                                  ar: 'إرسال للمورد',
+                                ),
+                                style: GoogleFonts.assistant(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      if (ok != true || !mounted || selectedSupplier == null) return;
+
+      final supplier = selectedSupplier!;
+      final phone = (supplier.phone ?? '').trim();
+      if (phone.isEmpty) return;
+
+      final itemList = itemsForSupplier();
+      final lines = <({InventoryItem item, int qty})>[];
+      for (final it in itemList) {
+        final qty = int.tryParse(qtyCtrl(it.id).text.trim()) ?? 0;
+        if (qty > 0) lines.add((item: it, qty: qty));
+      }
+      if (lines.isEmpty) return;
+
+      final message =
+          _supplierStockOrderMessage(this.context, l10n, supplier, lines);
+      await _openWhatsAppToPhone(phone, message);
+    } finally {
+      for (final c in qtyByItemId.values) {
+        c.dispose();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final itemsAsync = ref.watch(inventoryItemsProvider);
     final suppliersAsync = ref.watch(suppliersProvider);
+
+    final itemsForRefill = itemsAsync.value ?? const <InventoryItem>[];
+    final suppliersForOrder = suppliersAsync.value ?? const <Supplier>[];
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceContainerLowest,
@@ -98,13 +1023,113 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         scrolledUnderElevation: 0,
         backgroundColor: AppTheme.surfaceContainerLowest,
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.secondary,
-        foregroundColor: AppTheme.onPrimary,
-        elevation: 2,
-        onPressed: () => _openItemDialog(context, ref, l10n),
-        tooltip: l10n?.tr('newItem') ?? 'New Item',
-        child: const Icon(Icons.add_rounded, size: 28),
+      floatingActionButton: SizedBox(
+        width: 56,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSlide(
+              offset: _fabExpanded ? Offset.zero : const Offset(0, 0.25),
+              duration: const Duration(milliseconds: 190),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: _fabExpanded ? 1 : 0,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: IgnorePointer(
+                  ignoring: !_fabExpanded,
+                  child: FloatingActionButton(
+                    mini: true,
+                    heroTag: 'inv_order_fab',
+                    backgroundColor: AppTheme.surfaceContainerLowest,
+                    foregroundColor: AppTheme.secondary,
+                    elevation: 3,
+                    onPressed: () async {
+                      _closeFab();
+                      await _openOrderStockDialog(
+                        context,
+                        ref,
+                        l10n,
+                        suppliersForOrder,
+                        itemsForRefill,
+                      );
+                    },
+                    tooltip: _trOrLocale(
+                      context,
+                      l10n,
+                      'orderStock',
+                      en: 'Order stock',
+                      he: 'הזמנת מלאי',
+                      ar: 'طلب مخزون',
+                    ),
+                    child: const Icon(Icons.shopping_cart_checkout_rounded, size: 22),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            AnimatedSlide(
+              offset: _fabExpanded ? Offset.zero : const Offset(0, 0.25),
+              duration: const Duration(milliseconds: 190),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: _fabExpanded ? 1 : 0,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: IgnorePointer(
+                  ignoring: !_fabExpanded,
+                  child: FloatingActionButton(
+                    mini: true,
+                    heroTag: 'inv_refill_fab',
+                    backgroundColor: AppTheme.surfaceContainerLowest,
+                    foregroundColor: AppTheme.secondary,
+                    elevation: 3,
+                    onPressed: () async {
+                      _closeFab();
+                      await _openRefillStockDialog(
+                        context,
+                        ref,
+                        l10n,
+                        itemsForRefill,
+                      );
+                    },
+                    tooltip: _trOrLocale(
+                      context,
+                      l10n,
+                      'refillStock',
+                      en: 'Refill stock',
+                      he: 'מילוי מלאי',
+                      ar: 'تعبئة المخزون',
+                    ),
+                    child: const Icon(Icons.playlist_add_rounded, size: 22),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            FloatingActionButton(
+              heroTag: 'inv_add_fab',
+              backgroundColor: AppTheme.secondary,
+              foregroundColor: AppTheme.onPrimary,
+              elevation: 2,
+              onPressed: () {
+                if (_fabExpanded) {
+                  _closeFab();
+                  _openItemDialog(context, ref, l10n);
+                  return;
+                }
+                _toggleFab();
+              },
+              tooltip: l10n?.tr('newItem') ?? 'New Item',
+              child: AnimatedRotation(
+                turns: _fabExpanded ? 0.125 : 0,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: const Icon(Icons.add_rounded, size: 28),
+              ),
+            ),
+          ],
+        ),
       ),
       body: itemsAsync.when(
         data: (items) {
@@ -792,6 +1817,8 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
   final _barcodeCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   final _stockCtrl = TextEditingController();
+  final _autoRestockThresholdCtrl = TextEditingController();
+  final _autoRestockQuantityCtrl = TextEditingController();
 
   Uint8List? _pickedImageBytes;
   bool _deleteExistingPhoto = false;
@@ -799,6 +1826,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
   bool _isVatExempt = false;
   int _warrantyYears = 0;
   String? _supplierId;
+  bool _autoRestockEnabled = false;
   bool _saving = false;
 
   String _trOrLocale(
@@ -832,6 +1860,12 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
       _isVatExempt = e.isVatExempt;
       _supplierId = e.supplierId;
       _warrantyYears = e.warrantyYears;
+      _autoRestockEnabled = e.autoRestockEnabled;
+      _autoRestockThresholdCtrl.text = e.autoRestockThreshold.toString();
+      _autoRestockQuantityCtrl.text = e.autoRestockQuantity.toString();
+    } else {
+      _autoRestockThresholdCtrl.text = '0';
+      _autoRestockQuantityCtrl.text = '1';
     }
   }
 
@@ -842,6 +1876,8 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
     _barcodeCtrl.dispose();
     _priceCtrl.dispose();
     _stockCtrl.dispose();
+    _autoRestockThresholdCtrl.dispose();
+    _autoRestockQuantityCtrl.dispose();
     super.dispose();
   }
 
@@ -1004,6 +2040,12 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
       return v == null ? 0 : v.clamp(0, 1 << 30);
     }
 
+    int parsePositiveInt(String raw, {required int fallback}) {
+      final v = int.tryParse(raw.trim());
+      if (v == null) return fallback;
+      return v.clamp(0, 1 << 30);
+    }
+
     double? parsePrice(String raw) {
       final t = raw.trim().replaceAll(',', '.');
       if (t.isEmpty) return null;
@@ -1026,6 +2068,33 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
     try {
       final stock = parseStock(_stockCtrl.text);
       final price = parsePrice(_priceCtrl.text);
+      final autoThreshold = parsePositiveInt(
+        _autoRestockThresholdCtrl.text,
+        fallback: 0,
+      );
+      final autoQty =
+          parsePositiveInt(_autoRestockQuantityCtrl.text, fallback: 1)
+              .clamp(1, 1 << 30);
+
+      if (_autoRestockEnabled && autoThreshold <= 0) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.error,
+            content: Text(
+              _trOrLocale(
+                context,
+                l10n,
+                'autoRestockThresholdError',
+                en: 'Set a low-stock threshold greater than 0.',
+                he: 'יש להגדיר סף מלאי נמוך גדול מ-0.',
+                ar: 'يرجى تعيين حد مخزون منخفض أكبر من 0.',
+              ),
+            ),
+          ),
+        );
+        return;
+      }
 
       if (widget.existingItem == null) {
         var created = await widget.ref.read(inventoryServiceProvider).create(
@@ -1044,6 +2113,9 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 isWeighted: _isWeighted,
                 isVatExempt: _isVatExempt,
                 warrantyYears: _warrantyYears,
+                autoRestockEnabled: _autoRestockEnabled,
+                autoRestockThreshold: autoThreshold,
+                autoRestockQuantity: autoQty,
               ),
             );
 
@@ -1095,6 +2167,9 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
           'is_weighted': _isWeighted,
           'is_vat_exempt': _isVatExempt,
           'warranty_years': _warrantyYears,
+          'auto_restock_enabled': _autoRestockEnabled,
+          'auto_restock_threshold': autoThreshold,
+          'auto_restock_quantity': autoQty,
         };
         await widget.ref.read(inventoryServiceProvider).update(id, updates);
 
@@ -1565,6 +2640,96 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.32),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppTheme.outlineVariant.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SwitchListTile.adaptive(
+                        value: _autoRestockEnabled,
+                        onChanged: _saving
+                            ? null
+                            : (v) => setState(() => _autoRestockEnabled = v),
+                        title: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'autoRestockEnabled',
+                            en: 'Auto restock',
+                            he: 'הזמנה אוטומטית',
+                            ar: 'إعادة طلب تلقائية',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.onSurface,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'autoRestockSubtitle',
+                            en: 'When stock is low, create a restock order automatically.',
+                            he: 'כשמלאי נמוך, נוצרת הזמנת חידוש מלאי אוטומטית.',
+                            ar: 'عند انخفاض المخزون، يتم إنشاء طلب إعادة تزويد تلقائيًا.',
+                          ),
+                          style: GoogleFonts.assistant(
+                            color: AppTheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      if (_autoRestockEnabled) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildField(
+                                controller: _autoRestockThresholdCtrl,
+                                label: _trOrLocale(
+                                  context,
+                                  l10n,
+                                  'autoRestockThreshold',
+                                  en: 'Low-stock threshold',
+                                  he: 'סף מלאי נמוך',
+                                  ar: 'حد المخزون المنخفض',
+                                ),
+                                icon: Icons.warning_amber_rounded,
+                                keyboardType: TextInputType.number,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildField(
+                                controller: _autoRestockQuantityCtrl,
+                                label: _trOrLocale(
+                                  context,
+                                  l10n,
+                                  'autoRestockQuantity',
+                                  en: 'Auto restock qty',
+                                  he: 'כמות להזמנה',
+                                  ar: 'كمية إعادة الطلب',
+                                ),
+                                icon: Icons.add_shopping_cart_rounded,
+                                keyboardType: TextInputType.number,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Row(

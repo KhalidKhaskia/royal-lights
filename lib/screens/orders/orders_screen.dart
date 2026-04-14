@@ -1538,6 +1538,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     return false;
   }
 
+  bool _orderHasPendingReadyLines(Order order) {
+    for (final i in order.items) {
+      if (!i.readyForPickup) return true;
+    }
+    return false;
+  }
+
   /// Next step button for the order row (null = no action).
   _WorkflowActionDef? _workflowActionForOrder(
     BuildContext context,
@@ -1826,6 +1833,21 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     };
   }
 
+  String _waCustomerPartialReady(
+    String lang,
+    Order order, {
+    required String itemsBlock,
+  }) {
+    final n = order.orderNumber?.toString() ?? '?';
+    return switch (lang) {
+      'en' =>
+        'Hello! Part of your order #$n is ready for pickup:\n\n$itemsBlock\n\nWe will update you when the rest is ready.',
+      'ar' =>
+        'مرحبًا! جزء من طلبك رقم $n جاهز للاستلام:\n\n$itemsBlock\n\nسنُبلغك عند جاهزية الباقي.',
+      _ => 'שלום! חלק מהזמנה מספר $n מוכן לאיסוף:\n\n$itemsBlock\n\nנעדכן כששאר הפריטים יהיו מוכנים.',
+    };
+  }
+
   Future<void> _openWhatsAppToPhone(String rawPhone, String message) async {
     final phone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
     if (phone.isEmpty) return;
@@ -2104,7 +2126,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                           child: Row(
                                             children: [
                                               Icon(
-                                                Icons.link_off_rounded,
+                                                Icons.inventory_2_outlined,
                                                 color: AppTheme.outlineVariant,
                                                 size: 22,
                                               ),
@@ -2128,13 +2150,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                       _trLocale(
                                                         context,
                                                         l10n,
-                                                        'orderWorkflowLineNoSupplier',
-                                                        en:
-                                                            'No supplier — not part of receive step',
-                                                        he:
-                                                            'ללא סוכן — לא נכלל בקבלה',
-                                                        ar:
-                                                            'لا مورد — خارج خطوة الاستلام',
+                                                        'orderWorkflowInStore',
+                                                        en: 'In store',
+                                                        he: 'במלאי',
+                                                        ar: 'في المعرض',
                                                       ),
                                                       style:
                                                           GoogleFonts.assistant(
@@ -2422,6 +2441,523 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     }
   }
 
+  Future<void> _workflowNotifyReadyItemsDialog(Order order) async {
+    final l10n = AppLocalizations.of(context);
+    final notReady = order.items.where((i) => !i.readyForPickup).toList();
+    if (notReady.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _trLocale(
+              context,
+              l10n,
+              'orderWorkflowNoPendingReadyItems',
+              en: 'All items are already marked ready.',
+              he: 'כל הפריטים כבר מסומנים כמוכנים.',
+              ar: 'تم تعليم جميع العناصر كجاهزة.',
+            ),
+            style: GoogleFonts.assistant(),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final selected = <String>{};
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogContext, setLocal) {
+            void toggleAll(bool v) {
+              setLocal(() {
+                selected.clear();
+                if (v) {
+                  for (final i in notReady) {
+                    if (i.id != null) selected.add(i.id!);
+                  }
+                }
+              });
+            }
+
+            final mq = MediaQuery.sizeOf(dialogContext);
+            final readyCount = order.items.where((i) => i.readyForPickup).length;
+            final totalCount = order.items.length;
+            final progressLabel = () {
+              final code = Localizations.localeOf(context).languageCode;
+              return switch (code) {
+                'he' => '$readyCount מתוך $totalCount מוכנים',
+                'ar' => '$readyCount من $totalCount جاهزة',
+                _ => '$readyCount of $totalCount ready',
+              };
+            }();
+
+            return Dialog(
+              backgroundColor: AppTheme.surfaceContainerLowest,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+                side: BorderSide(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.45),
+                ),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: (mq.width - 32).clamp(320.0, 680.0),
+                  maxHeight: (mq.height * 0.88).clamp(420.0, 820.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 26, 28, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: AppTheme.secondaryContainer
+                                  .withValues(alpha: 0.55),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Icon(
+                                Icons.checklist_rounded,
+                                color: AppTheme.secondary,
+                                size: 26,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _trLocale(
+                                    context,
+                                    l10n,
+                                    'orderWorkflowReadyItemsDialogTitle',
+                                    en: 'Items ready for pickup',
+                                    he: 'פריטים שמוכנים לאיסוף',
+                                    ar: 'عناصر جاهزة للاستلام',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 22,
+                                    height: 1.2,
+                                    color: AppTheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _trLocale(
+                                    context,
+                                    l10n,
+                                    'orderWorkflowReadyItemsDialogSubtitle',
+                                    en:
+                                        'Select the items that are ready now. We will mark them ready and send the customer a WhatsApp with the selected items.',
+                                    he:
+                                        'בחרו את הפריטים שמוכנים עכשיו. נסמן אותם כמוכנים ונשלח ללקוח WhatsApp עם הפריטים שנבחרו.',
+                                    ar:
+                                        'حدّد العناصر الجاهزة الآن. سنعلّمها كجاهزة ونرسل للعميل واتساب بالعناصر المحددة.',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontSize: 13.5,
+                                    height: 1.45,
+                                    color: AppTheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.pie_chart_outline_rounded,
+                                size: 20,
+                                color: AppTheme.secondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  progressLabel,
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: AppTheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.secondary,
+                            side: BorderSide(
+                              color: AppTheme.secondary.withValues(alpha: 0.45),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () =>
+                              toggleAll(selected.length != notReady.length),
+                          icon: const Icon(Icons.select_all_rounded, size: 18),
+                          label: Text(
+                            _trLocale(
+                              context,
+                              l10n,
+                              'orderWorkflowSelectAll',
+                              en: 'Select all pending',
+                              he: 'בחר הכל ממתינים',
+                              ar: 'تحديد كل المعلّق',
+                            ),
+                            style: GoogleFonts.assistant(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: (mq.height * 0.5).clamp(240.0, 540.0),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final it in order.items)
+                                if (it.id != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: () {
+                                      final id = it.id!;
+                                      if (it.readyForPickup) {
+                                        return Opacity(
+                                          opacity: 0.55,
+                                          child: DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.secondaryContainer
+                                                  .withValues(alpha: 0.22),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: AppTheme.secondary
+                                                    .withValues(alpha: 0.35),
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 12,
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.check_circle_rounded,
+                                                  color: AppTheme.secondary,
+                                                    size: 22,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          it.name,
+                                                          style: GoogleFonts
+                                                              .assistant(
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: AppTheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          _trLocale(
+                                                            context,
+                                                            l10n,
+                                                            'orderWorkflowReadyItemLabel',
+                                                            en: 'Ready',
+                                                            he: 'מוכן',
+                                                            ar: 'جاهز',
+                                                          ),
+                                                          style: GoogleFonts
+                                                              .assistant(
+                                                            fontSize: 12,
+                                                            color:
+                                                              AppTheme.secondary,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      final checked = selected.contains(id);
+                                      return Material(
+                                        color: AppTheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: InkWell(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          onTap: () {
+                                            setLocal(() {
+                                              if (checked) {
+                                                selected.remove(id);
+                                              } else {
+                                                selected.add(id);
+                                              }
+                                            });
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    top: 2,
+                                                  ),
+                                                  child:
+                                                      AppAnimatedSquareCheckbox(
+                                                    value: checked,
+                                                    activeColor:
+                                                        AppTheme.secondary,
+                                                    onChanged: (v) {
+                                                      setLocal(() {
+                                                        if (v == true) {
+                                                          selected.add(id);
+                                                        } else {
+                                                          selected.remove(id);
+                                                        }
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        it.name,
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        '×${it.quantity}',
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontSize: 12,
+                                                          color: AppTheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }(),
+                                  ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.onSurfaceVariant,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _t(l10n, 'cancel', 'Cancel'),
+                              style: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.secondary,
+                              foregroundColor: AppTheme.onSecondary,
+                              disabledBackgroundColor:
+                                  AppTheme.secondary.withValues(alpha: 0.35),
+                              disabledForegroundColor:
+                                  AppTheme.onSecondary.withValues(alpha: 0.7),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                                vertical: 14,
+                              ),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: selected.isEmpty
+                                ? null
+                                : () => Navigator.pop(ctx, true),
+                            child: Text(
+                              _trLocale(
+                                context,
+                                l10n,
+                                'orderWorkflowNotifyReadyItems',
+                                en: 'Notify ready items',
+                                he: 'עדכון פריטים מוכנים',
+                                ar: 'إبلاغ بالعناصر الجاهزة',
+                              ),
+                              style: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || selected.isEmpty || !mounted) return;
+
+    setState(() => _updatingOrderId = order.id);
+    try {
+      final username = ref.read(currentUsernameProvider);
+      await ref
+          .read(orderServiceProvider)
+          .markItemsReadyForPickup(selected, username);
+
+      final customer =
+          await ref.read(customerServiceProvider).getById(order.customerId);
+      if (!mounted) return;
+      final phone = customer.phones.isNotEmpty ? customer.phones.first : '';
+      if (phone.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _trLocale(
+                context,
+                l10n,
+                'orderWorkflowNoPhoneCustomer',
+                en: 'Customer has no phone for WhatsApp.',
+                he: 'אין מספר טלפון ללקוח ל-WhatsApp.',
+                ar: 'لا يوجد هاتف للعميل لواتساب.',
+              ),
+              style: GoogleFonts.assistant(),
+            ),
+            backgroundColor: AppTheme.warning,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        final lang = Localizations.localeOf(context).languageCode;
+        final isFinalBatch = selected.length == notReady.length;
+        if (isFinalBatch) {
+          await _openWhatsAppToPhone(phone, _waCustomerReadyPickup(lang, order));
+          await ref.read(orderServiceProvider).updateStatus(
+                order.id,
+                OrderStatus.awaitingShipping.dbValue,
+                username,
+              );
+        } else {
+          final selectedItems = order.items
+            .where((i) => i.id != null && selected.contains(i.id))
+            .toList();
+          final itemsBlock = selectedItems
+              .map((it) => '${it.name}\n×${it.quantity}')
+              .join('\n\n');
+          await _openWhatsAppToPhone(
+            phone,
+            _waCustomerPartialReady(lang, order, itemsBlock: itemsBlock),
+          );
+        }
+      }
+
+      ref.invalidate(ordersProvider);
+      ref.invalidate(customersProvider);
+      final fc = ref.read(ordersCustomerFilterProvider);
+      if (fc != null) ref.invalidate(customerOrdersProvider(fc.id));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _updatingOrderId = null);
+    }
+  }
+
   Future<void> _workflowAdvanceToPreparing(Order order) async {
     final l10n = AppLocalizations.of(context);
     final ok = await showDialog<bool>(
@@ -2496,6 +3032,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
   Future<void> _workflowReadyForPickup(Order order) async {
     final l10n = AppLocalizations.of(context);
+    // If not all lines are ready yet, use the selection popup. Already-ready items
+    // are dimmed and cannot be selected again.
+    if (_orderHasPendingReadyLines(order)) {
+      await _workflowNotifyReadyItemsDialog(order);
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2668,6 +3210,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             orderId,
             username,
           );
+
+      // Only when the order is fully completed (Delivered), deduct inventory stock once.
+      if (newStatus == OrderStatus.delivered.dbValue) {
+        await ref
+            .read(orderServiceProvider)
+            .deductInventoryForOrder(orderId, username);
+      }
       ref.invalidate(ordersProvider);
       ref.invalidate(customersProvider);
       ref.invalidate(totalUnpaidDebtsProvider);
