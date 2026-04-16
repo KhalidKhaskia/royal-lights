@@ -11,6 +11,12 @@ class InventoryItem {
   final bool isVatExempt;
   /// 0 = none, 3 = three-year, 5 = five-year warranty.
   final int warrantyYears;
+  final bool autoRestockEnabled;
+  /// When `availableStock` drops below this number, a restock order is created.
+  /// `0` disables threshold checks.
+  final int autoRestockThreshold;
+  /// Quantity to request when auto-restock triggers (min 1).
+  final int autoRestockQuantity;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -26,6 +32,9 @@ class InventoryItem {
     this.isWeighted = false,
     this.isVatExempt = false,
     this.warrantyYears = 0,
+    this.autoRestockEnabled = false,
+    this.autoRestockThreshold = 0,
+    this.autoRestockQuantity = 1,
     this.createdAt,
     this.updatedAt,
   });
@@ -43,6 +52,9 @@ class InventoryItem {
       isWeighted: json['is_weighted'] as bool? ?? false,
       isVatExempt: json['is_vat_exempt'] as bool? ?? false,
       warrantyYears: (json['warranty_years'] as num?)?.toInt() ?? 0,
+      autoRestockEnabled: json['auto_restock_enabled'] as bool? ?? false,
+      autoRestockThreshold: (json['auto_restock_threshold'] as num?)?.toInt() ?? 0,
+      autoRestockQuantity: (json['auto_restock_quantity'] as num?)?.toInt() ?? 1,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -64,6 +76,9 @@ class InventoryItem {
       'is_weighted': isWeighted,
       'is_vat_exempt': isVatExempt,
       'warranty_years': warrantyYears,
+      'auto_restock_enabled': autoRestockEnabled,
+      'auto_restock_threshold': autoRestockThreshold,
+      'auto_restock_quantity': autoRestockQuantity,
     };
   }
 
@@ -79,6 +94,9 @@ class InventoryItem {
     bool? isWeighted,
     bool? isVatExempt,
     int? warrantyYears,
+    bool? autoRestockEnabled,
+    int? autoRestockThreshold,
+    int? autoRestockQuantity,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -94,6 +112,9 @@ class InventoryItem {
       isWeighted: isWeighted ?? this.isWeighted,
       isVatExempt: isVatExempt ?? this.isVatExempt,
       warrantyYears: warrantyYears ?? this.warrantyYears,
+      autoRestockEnabled: autoRestockEnabled ?? this.autoRestockEnabled,
+      autoRestockThreshold: autoRestockThreshold ?? this.autoRestockThreshold,
+      autoRestockQuantity: autoRestockQuantity ?? this.autoRestockQuantity,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

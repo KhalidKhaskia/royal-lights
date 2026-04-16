@@ -27,6 +27,12 @@ class OrderItem {
   final bool existingInStore; // 11. Existing In Store
   /// Confirmed received from supplier (partial order fulfillment).
   final bool supplierReceived;
+  /// Confirmed ready for customer pickup (partial readiness supported).
+  final bool readyForPickup;
+  /// Links to inventory item (when line was picked from inventory).
+  final String? inventoryItemId;
+  /// True once inventory stock was deducted after order completion.
+  final bool inventoryDeducted;
   /// 0 = none, 3 = three-year, 5 = five-year warranty.
   final int warrantyYears;
   /// When warranty starts counting (usually delivery date once it begins).
@@ -59,6 +65,9 @@ class OrderItem {
     this.deliveryDate,
     this.existingInStore = false,
     this.supplierReceived = false,
+    this.readyForPickup = false,
+    this.inventoryItemId,
+    this.inventoryDeducted = false,
     this.warrantyYears = 0,
     this.warrantyStartDate,
     this.createdBy,
@@ -91,6 +100,9 @@ class OrderItem {
           : null,
       existingInStore: json['existing_in_store'] as bool? ?? false,
       supplierReceived: json['supplier_received'] as bool? ?? false,
+      readyForPickup: json['ready_for_pickup'] as bool? ?? false,
+      inventoryItemId: json['inventory_item_id'] as String?,
+      inventoryDeducted: json['inventory_deducted'] as bool? ?? false,
       warrantyYears: _warrantyYearsFromJson(json['warranty_years']),
       warrantyStartDate: json['warranty_start_date'] != null
           ? DateTime.parse(json['warranty_start_date'] as String)
@@ -135,6 +147,9 @@ class OrderItem {
       'delivery_date': deliveryDate?.toIso8601String().split('T').first,
       'existing_in_store': existingInStore,
       'supplier_received': supplierReceived || existingInStore,
+      'ready_for_pickup': readyForPickup,
+      'inventory_item_id': inventoryItemId,
+      'inventory_deducted': inventoryDeducted,
       'warranty_years': warrantyYears,
       'warranty_start_date': warrantyStartDate?.toIso8601String().split('T').first,
       'created_by': createdBy,
@@ -160,6 +175,9 @@ class OrderItem {
     DateTime? deliveryDate,
     bool? existingInStore,
     bool? supplierReceived,
+    bool? readyForPickup,
+    String? inventoryItemId,
+    bool? inventoryDeducted,
     int? warrantyYears,
     DateTime? warrantyStartDate,
     String? createdBy,
@@ -183,6 +201,9 @@ class OrderItem {
       deliveryDate: deliveryDate ?? this.deliveryDate,
       existingInStore: existingInStore ?? this.existingInStore,
       supplierReceived: supplierReceived ?? this.supplierReceived,
+      readyForPickup: readyForPickup ?? this.readyForPickup,
+      inventoryItemId: inventoryItemId ?? this.inventoryItemId,
+      inventoryDeducted: inventoryDeducted ?? this.inventoryDeducted,
       warrantyYears: warrantyYears ?? this.warrantyYears,
       warrantyStartDate: warrantyStartDate ?? this.warrantyStartDate,
       createdBy: createdBy ?? this.createdBy,

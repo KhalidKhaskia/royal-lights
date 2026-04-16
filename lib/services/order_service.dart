@@ -112,6 +112,33 @@ class OrderService {
     }).inFilter('id', ids);
   }
 
+  /// Marks line items as ready for customer pickup (partial readiness supported).
+  /// [itemIds] are order_items.id.
+  Future<void> markItemsReadyForPickup(
+    Iterable<String> itemIds,
+    String username,
+  ) async {
+    final ids = itemIds.where((e) => e.isNotEmpty).toList();
+    if (ids.isEmpty) return;
+    await _client.from('order_items').update({
+      'ready_for_pickup': true,
+      'updated_by': username,
+    }).inFilter('id', ids);
+  }
+
+  /// Deducts inventory stock for an order that was completed (Delivered),
+  /// only for order lines linked to inventory via `inventory_item_id`,
+  /// and only once per line (`inventory_deducted`).
+  Future<void> deductInventoryForOrder(String orderId, String username) async {
+    await _client.rpc(
+      'deduct_inventory_for_order',
+      params: {
+        'p_order_id': orderId,
+        'p_username': username,
+      },
+    );
+  }
+
   /// Starts warranty counting for order items (if not started yet).
   ///
   /// Rule:

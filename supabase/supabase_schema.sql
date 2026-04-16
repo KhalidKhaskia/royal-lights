@@ -111,6 +111,9 @@ CREATE TABLE IF NOT EXISTS order_items (
   supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL, -- 10. Supplier dropdown
   delivery_date DATE, -- per-line shipping / delivery (optional)
   existing_in_store BOOLEAN NOT NULL DEFAULT TRUE, -- 11. Existing In Store
+  ready_for_pickup BOOLEAN NOT NULL DEFAULT FALSE, -- line is ready for pickup (partial readiness)
+  inventory_item_id UUID REFERENCES inventory_items(id) ON DELETE SET NULL, -- link to inventory for stock deduction
+  inventory_deducted BOOLEAN NOT NULL DEFAULT FALSE, -- stock deducted once order is completed
   warranty_years INTEGER NOT NULL DEFAULT 0, -- 0 = none, 3 or 5 = years
   warranty_start_date DATE, -- when warranty starts counting (usually delivery date)
   created_by TEXT,
