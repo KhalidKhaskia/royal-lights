@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
@@ -11,6 +10,7 @@ import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../../models/order_item.dart';
 import '../../providers/providers.dart';
+import '../../services/whatsapp_service.dart';
 import '../../theme/order_status_colors.dart';
 import '../../widgets/app_dropdown_styles.dart';
 import '../../widgets/app_loading_overlay.dart';
@@ -166,15 +166,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         itemsText: itemsText,
       );
 
-      final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
-      try {
-        await launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        );
-      } catch (_) {
-        // WhatsApp not available / error launching URL.
-      }
+      await WhatsAppService.sendMessage(phone, message);
     }
   }
 
@@ -215,9 +207,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             context,
             l10n,
             'orderCancelConfirmSupplierWaWillOpen',
-            en: 'WhatsApp will open for each supplier with a cancellation notice.',
-            he: 'ייפתח WhatsApp לכל סוכן עם הודעת ביטול.',
-            ar: 'سيتم فتح واتساب لكل مورد مع إشعار إلغاء.',
+            en: 'A cancellation message will be sent automatically to each supplier via WhatsApp.',
+            he: 'תישלח הודעת ביטול לכל סוכן בוואטסאפ באופן אוטומטי.',
+            ar: 'سيتم إرسال رسالة إلغاء لكل مورد عبر واتساب تلقائيًا.',
           )
         : _trLocale(
             context,
@@ -1811,17 +1803,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     );
   }
 
-  String _waCustomerPreparing(String lang, Order order) {
-    final n = order.orderNumber?.toString() ?? '?';
-    return switch (lang) {
-      'en' =>
-        'Hello! Your order #$n is being prepared. We will update you when it is ready for pickup.',
-      'ar' =>
-        'مرحبًا! طلبك رقم $n قيد التحضير. سنُبلغك عند جاهزيته للاستلام.',
-      _ => 'שלום! הזמנה מספר $n שלכם בהכנה. נעדכן כשתהיה מוכנה לאיסוף.',
-    };
-  }
-
   String _waCustomerReadyPickup(String lang, Order order) {
     final n = order.orderNumber?.toString() ?? '?';
     return switch (lang) {
@@ -1851,10 +1832,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Future<void> _openWhatsAppToPhone(String rawPhone, String message) async {
     final phone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
     if (phone.isEmpty) return;
-    final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {}
+    await WhatsAppService.sendMessage(phone, message);
   }
 
   Future<void> _workflowSendToSupplier(Order order) async {
@@ -2211,14 +2189,23 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                       ),
                                                     ),
                                                     Text(
-                                                      _trLocale(
-                                                        context,
-                                                        l10n,
-                                                        'orderWorkflowReceivedFromSupplier',
-                                                        en: 'Received',
-                                                        he: 'התקבל',
-                                                        ar: 'مستلم',
-                                                      ),
+                                                      it.existingInStore
+                                                          ? _trLocale(
+                                                              context,
+                                                              l10n,
+                                                              'orderWorkflowExistsInStock',
+                                                              en: 'In stock',
+                                                              he: 'קיים במלאי',
+                                                              ar: 'متوفر بالمخزون',
+                                                            )
+                                                          : _trLocale(
+                                                              context,
+                                                              l10n,
+                                                              'orderWorkflowReceivedFromSupplier',
+                                                              en: 'Received',
+                                                              he: 'התקבל',
+                                                              ar: 'مستلم',
+                                                            ),
                                                       style:
                                                           GoogleFonts.assistant(
                                                         fontSize: 12,
@@ -2979,11 +2966,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             context,
             l10n,
             'orderWorkflowPreparingConfirmBody',
-            en:
-                'Open WhatsApp to tell the customer their order is being prepared.',
-            he: 'ייפתח WhatsApp לעדכון שההזמנה בהכנה.',
-            ar:
-                'سيتم فتح واتساب لإبلاغ العميل أن الطلب قيد التحضير.',
+            en: 'A WhatsApp message will be sent to the customer automatically.',
+            he: 'תישלח ללקוח הודעת WhatsApp באופן אוטומטי.',
+            ar: 'سيتم إرسال رسالة واتساب للعميل تلقائيًا.',
           ),
           style: GoogleFonts.assistant(),
         ),
@@ -3023,10 +3008,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       return;
     }
 
-    final langPrep = Localizations.localeOf(context).languageCode;
-    await _openWhatsAppToPhone(phone, _waCustomerPreparing(langPrep, order));
-
-    if (!mounted) return;
     await _updateOrderStatus(order.id, OrderStatus.preparing.dbValue);
   }
 
@@ -3197,6 +3178,93 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     await _updateOrderStatus(order.id, OrderStatus.delivered.dbValue);
   }
 
+  Future<void> _maybeSendGenericStatusUpdateToCustomer(
+      String orderId, String newStatusDb) async {
+    // Statuses with their own dedicated workflow message — skip generic.
+    const skip = {
+      'Awaiting Shipping',
+      'Canceled',
+      'Active',
+    };
+    if (skip.contains(newStatusDb)) return;
+
+    final orders = ref.read(ordersProvider).value;
+    final order = orders?.where((o) => o.id == orderId).firstOrNull;
+    if (order == null) return;
+
+    final customers = ref.read(customersProvider).value;
+    final customer =
+        customers?.where((c) => c.id == order.customerId).firstOrNull;
+    if (customer == null || customer.phones.isEmpty) return;
+    final phone = customer.phones.first.trim();
+    if (phone.isEmpty) return;
+
+    final lang = mounted
+        ? Localizations.localeOf(context).languageCode
+        : 'he';
+    final status = OrderStatusExtension.fromString(newStatusDb);
+    final message = _buildGenericStatusMessage(
+      languageCode: lang,
+      customerName: customer.customerName.trim().isNotEmpty
+          ? customer.customerName
+          : customer.cardName,
+      orderNumber: order.orderNumber,
+      status: status,
+    );
+
+    await WhatsAppService.sendMessage(phone, message);
+  }
+
+  String _buildGenericStatusMessage({
+    required String languageCode,
+    required String customerName,
+    required int? orderNumber,
+    required OrderStatus status,
+  }) {
+    final lang =
+        (languageCode == 'he' || languageCode == 'ar') ? languageCode : 'en';
+    final orderRef = orderNumber != null ? '#$orderNumber' : '';
+    final statusLabel = _statusLabelLocalized(status, lang);
+
+    return switch (lang) {
+      'he' =>
+        'שלום $customerName,\n\nעדכון על הזמנה מספר $orderRef:\nהסטטוס עודכן ל: $statusLabel\n\nתודה שבחרת ב-Royal Lights!',
+      'ar' =>
+        'مرحبًا $customerName،\n\nتحديث على الطلب رقم $orderRef:\nتم تحديث الحالة إلى: $statusLabel\n\nشكرًا لاختيارك Royal Lights!',
+      _ =>
+        'Hello $customerName,\n\nUpdate on order $orderRef:\nStatus changed to: $statusLabel\n\nThank you for choosing Royal Lights!',
+    };
+  }
+
+  String _statusLabelLocalized(OrderStatus s, String lang) {
+    switch (lang) {
+      case 'he':
+        switch (s) {
+          case OrderStatus.active: return 'פעיל';
+          case OrderStatus.preparing: return 'בהכנה';
+          case OrderStatus.sentToSupplier: return 'נשלח לסוכן';
+          case OrderStatus.inAssembly: return 'בהרכבה';
+          case OrderStatus.awaitingShipping: return 'ממתין למשלוח';
+          case OrderStatus.handled: return 'טופל';
+          case OrderStatus.delivered: return 'נמסר';
+          case OrderStatus.canceled: return 'בוטל';
+        }
+      case 'ar':
+        switch (s) {
+          case OrderStatus.active: return 'نشِط';
+          case OrderStatus.preparing: return 'قيد التحضير';
+          case OrderStatus.sentToSupplier: return 'أُرسل للمورد';
+          case OrderStatus.inAssembly: return 'قيد التركيب';
+          case OrderStatus.awaitingShipping: return 'بانتظار الشحن';
+          case OrderStatus.handled: return 'تمت المعالجة';
+          case OrderStatus.delivered: return 'تم التسليم';
+          case OrderStatus.canceled: return 'ملغي';
+        }
+      default:
+        return s.dbValue;
+    }
+  }
+
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {
     setState(() => _updatingOrderId = orderId);
     try {
@@ -3217,6 +3285,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             .read(orderServiceProvider)
             .deductInventoryForOrder(orderId, username);
       }
+      // Notify customer for status changes that don't already have a richer
+      // workflow-specific message (preparing/awaitingShipping/canceled handled elsewhere).
+      await _maybeSendGenericStatusUpdateToCustomer(orderId, newStatus);
+
       ref.invalidate(ordersProvider);
       ref.invalidate(customersProvider);
       ref.invalidate(totalUnpaidDebtsProvider);

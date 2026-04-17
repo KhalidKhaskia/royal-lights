@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart' show DateFormat;
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_theme.dart';
@@ -12,6 +12,7 @@ import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../../models/payment.dart';
 import '../../providers/providers.dart';
+import '../../services/whatsapp_service.dart';
 import '../../theme/order_status_colors.dart';
 import '../orders/order_form_screen.dart';
 import '../payments/payments_screen.dart';
@@ -159,44 +160,191 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
 
     final code = Localizations.localeOf(context).languageCode;
-    final message = switch (code) {
-      'he' =>
-        'שלום ${_customer.cardName},\n\nמצורף דוח מצב חשבון עדכני.\nיתרת חוב: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
-      'ar' =>
-        'مرحبًا ${_customer.cardName},\n\nمرفق تقرير حالة الحساب المحدث.\nالرصيد المتبقي: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
-      _ =>
-        'Hello ${_customer.cardName},\n\nAttached is an up-to-date account summary.\nRemaining balance: ₪${_customer.remainingDebt.toStringAsFixed(2)}',
+    final orders = await ref.read(customerOrdersProvider(_customer.id).future);
+    final payments =
+        await ref.read(customerPaymentsProvider(_customer.id).future);
+    final message = _buildCustomerReportMessage(
+      languageCode: code,
+      orders: orders,
+      payments: payments,
+    );
+
+    final result = await WhatsAppService.sendMessage(phone, message);
+    if (!context.mounted) return;
+    if (result) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n?.tr('messageSent') ?? 'Message sent'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(l10n?.tr('whatsappError') ?? 'Could not send WhatsApp'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  String _buildCustomerReportMessage({
+    required String languageCode,
+    required List<Order> orders,
+    required List<Payment> payments,
+  }) {
+    final lang = (languageCode == 'he' || languageCode == 'ar') ? languageCode : 'en';
+    final money = NumberFormat('#,##0.00', 'en_US');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    final greetingName =
+        _customer.customerName.trim().isNotEmpty ? _customer.customerName : _customer.cardName;
+
+    final greeting = switch (lang) {
+      'he' => 'שלום $greetingName,',
+      'ar' => 'مرحبًا $greetingName،',
+      _ => 'Hello $greetingName,',
     };
 
-    // Instead of whatsapp://, use https://wa.me/ which reliably redirects on mobile and web
-    final url =
-        Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+    final ordersHeader = switch (lang) {
+      'he' => '📋 דוח הזמנות:',
+      'ar' => '📋 تقرير الطلبات:',
+      _ => '📋 Orders report:',
+    };
+    final ordersTotalLabel = switch (lang) {
+      'he' => 'סה"כ',
+      'ar' => 'الإجمالي',
+      _ => 'Total',
+    };
+    final ordersWord = switch (lang) {
+      'he' => 'הזמנות',
+      'ar' => 'طلبات',
+      _ => 'orders',
+    };
 
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text(l10n?.tr('whatsappError') ?? 'Could not open WhatsApp'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
+    final accountHeader = switch (lang) {
+      'he' => '💳 דוח חשבון:',
+      'ar' => '💳 تقرير الحساب:',
+      _ => '💳 Account report:',
+    };
+    final paymentsListHeader = switch (lang) {
+      'he' => 'תשלומים אחרונים:',
+      'ar' => 'الدفعات الأخيرة:',
+      _ => 'Recent payments:',
+    };
+    final accountStatusLabel = switch (lang) {
+      'he' => 'מצב החשבון',
+      'ar' => 'حالة الحساب',
+      _ => 'Account status',
+    };
+
+    final sections = <String>[greeting];
+
+    if (orders.isNotEmpty) {
+      final counts = <OrderStatus, int>{};
+      for (final o in orders) {
+        counts[o.status] = (counts[o.status] ?? 0) + 1;
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(l10n?.tr('whatsappError') ?? 'Could not open WhatsApp'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+      final lines = <String>[ordersHeader];
+      for (final status in OrderStatusExtension.all) {
+        final c = counts[status] ?? 0;
+        if (c == 0) continue;
+        lines.add('• ${_statusLabel(status, lang)}: $c');
       }
+      lines.add('$ordersTotalLabel: ${orders.length} $ordersWord');
+      sections.add(lines.join('\n'));
     }
+
+    final debt = _customer.remainingDebt;
+    if (payments.isNotEmpty || debt != 0) {
+      final lines = <String>[accountHeader];
+      if (payments.isNotEmpty) {
+        lines.add(paymentsListHeader);
+        final sorted = [...payments]..sort((a, b) => b.date.compareTo(a.date));
+        for (final p in sorted) {
+          lines.add(
+              '• ${dateFmt.format(p.date)} - ₪${money.format(p.amount)} (${_paymentTypeLabel(p.type, lang)})');
+        }
+        lines.add('');
+      }
+      lines.add('$accountStatusLabel: ${_accountStatusText(debt, lang, money)}');
+      sections.add(lines.join('\n'));
+    }
+
+    return sections.join('\n\n');
+  }
+
+  String _statusLabel(OrderStatus s, String lang) {
+    switch (lang) {
+      case 'he':
+        switch (s) {
+          case OrderStatus.active: return 'פעיל';
+          case OrderStatus.preparing: return 'בהכנה';
+          case OrderStatus.sentToSupplier: return 'נשלח לספק';
+          case OrderStatus.inAssembly: return 'בהרכבה';
+          case OrderStatus.awaitingShipping: return 'ממתין למשלוח';
+          case OrderStatus.handled: return 'טופל';
+          case OrderStatus.delivered: return 'נמסר';
+          case OrderStatus.canceled: return 'בוטל';
+        }
+      case 'ar':
+        switch (s) {
+          case OrderStatus.active: return 'نشِط';
+          case OrderStatus.preparing: return 'قيد التحضير';
+          case OrderStatus.sentToSupplier: return 'أُرسل للمورد';
+          case OrderStatus.inAssembly: return 'قيد التركيب';
+          case OrderStatus.awaitingShipping: return 'بانتظار الشحن';
+          case OrderStatus.handled: return 'تمت المعالجة';
+          case OrderStatus.delivered: return 'تم التسليم';
+          case OrderStatus.canceled: return 'ملغي';
+        }
+      default:
+        return s.dbValue;
+    }
+  }
+
+  String _paymentTypeLabel(PaymentType t, String lang) {
+    switch (lang) {
+      case 'he':
+        switch (t) {
+          case PaymentType.cash: return 'מזומן';
+          case PaymentType.credit: return 'אשראי';
+          case PaymentType.check: return 'צ\'ק';
+        }
+      case 'ar':
+        switch (t) {
+          case PaymentType.cash: return 'نقدًا';
+          case PaymentType.credit: return 'بطاقة';
+          case PaymentType.check: return 'شيك';
+        }
+      default:
+        return t.dbValue;
+    }
+  }
+
+  String _accountStatusText(double debt, String lang, NumberFormat money) {
+    if (debt == 0) {
+      return switch (lang) {
+        'he' => 'סודר',
+        'ar' => 'مسوّى',
+        _ => 'Settled',
+      };
+    }
+    if (debt > 0) {
+      final amt = '₪${money.format(debt)}';
+      return switch (lang) {
+        'he' => 'חוב $amt',
+        'ar' => 'دين $amt',
+        _ => 'Debt $amt',
+      };
+    }
+    final amt = '₪${money.format(debt.abs())}';
+    return switch (lang) {
+      'he' => 'יתרה $amt',
+      'ar' => 'رصيد $amt',
+      _ => 'Credit $amt',
+    };
   }
 
   void _openEditDialog(AppLocalizations? l10n) {

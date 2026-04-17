@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_animations.dart';
 import '../../config/app_theme.dart';
@@ -14,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/inventory_item.dart';
 import '../../models/supplier.dart';
 import '../../providers/providers.dart';
+import '../../services/whatsapp_service.dart';
 import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/app_dropdown_styles.dart';
 import '../../widgets/editorial_screen_title.dart';
@@ -411,10 +411,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   Future<void> _openWhatsAppToPhone(String rawPhone, String message) async {
     final phone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
     if (phone.isEmpty) return;
-    final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {}
+    await WhatsAppService.sendMessage(phone, message);
   }
 
   String _supplierStockOrderMessage(
