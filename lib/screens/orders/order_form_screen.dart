@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import '../../config/app_theme.dart';
+import '../../services/whatsapp_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/customer.dart';
 import '../../models/order.dart';
@@ -976,7 +977,20 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final shortestSide = MediaQuery.sizeOf(context).shortestSide;
     final isTabletLayout = shortestSide >= 600;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        final action = await _confirmLeaveUnsaved(l10n);
+        if (action == _LeaveAction.cancel || !mounted) return;
+        if (action == _LeaveAction.save) {
+          await _saveOrder();
+          if (!mounted) return;
+        }
+        navigator.pop();
+      },
+      child: Scaffold(
       resizeToAvoidBottomInset: !isTabletLayout,
       appBar: AppBar(
         centerTitle: false,
@@ -1530,6 +1544,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -2316,7 +2331,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
               DataCell(
                 SizedBox(
-                  width: 150,
+                  width: 220,
                   child: Row(
                     children: [
                       Expanded(
@@ -2477,10 +2492,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
               DataCell(
                 SizedBox(
-                  width: 120,
+                  width: 240,
                   child: TextField(
                     controller: item.extrasCtrl,
                     enabled: !readOnly,
+                    minLines: 1,
+                    maxLines: 4,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
                     onChanged: (_) {
                       _markDirty();
                       setState(() {});
@@ -2832,6 +2851,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       }
       ref.invalidate(ordersProvider);
       ref.invalidate(customersProvider);
+
+      // Send order summary to customer (every save).
+      await _sendOrderSummaryToCustomer(orderItems);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2842,9 +2864,287 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
   }
 
+  Future<_LeaveAction> _confirmLeaveUnsaved(AppLocalizations? l10n) async {
+    final lang = Localizations.localeOf(context).languageCode;
+    final title = switch (lang) {
+      'he' => 'שינויים לא שמורים',
+      'ar' => 'تغييرات غير محفوظة',
+      _ => 'Unsaved changes',
+    };
+    final body = switch (lang) {
+      'he' => 'יש שינויים שלא נשמרו. האם לשמור את ההזמנה?',
+      'ar' => 'هناك تغييرات غير محفوظة. هل تريد حفظ الطلب؟',
+      _ => 'You have unsaved changes. Do you want to save the order?',
+    };
+    final saveLabel = switch (lang) {
+      'he' => 'שמור',
+      'ar' => 'حفظ',
+      _ => 'Save',
+    };
+    final discardLabel = switch (lang) {
+      'he' => 'אל תשמור',
+      'ar' => 'تجاهل',
+      _ => "Don't save",
+    };
+    final cancelLabel = l10n?.tr('cancel') ??
+        switch (lang) {
+          'he' => 'ביטול',
+          'ar' => 'إلغاء',
+          _ => 'Cancel',
+        };
+
+    final result = await showDialog<_LeaveAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
+        content: Text(body, style: GoogleFonts.assistant()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveAction.cancel),
+            child: Text(cancelLabel,
+                style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveAction.discard),
+            child: Text(discardLabel,
+                style: GoogleFonts.assistant(color: AppTheme.error)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, _LeaveAction.save),
+            child: Text(saveLabel,
+                style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    return result ?? _LeaveAction.cancel;
+  }
+
+  Future<bool> _confirmSendToSuppliers(AppLocalizations? l10n) async {
+    final lang = Localizations.localeOf(context).languageCode;
+    final title = switch (lang) {
+      'he' => 'שליחה לסוכנים',
+      'ar' => 'إرسال للمورّدين',
+      _ => 'Send to suppliers',
+    };
+    final body = switch (lang) {
+      'he' => 'האם לשלוח את ההזמנה לסוכנים בוואטסאפ?',
+      'ar' => 'هل تريد إرسال الطلب للمورّدين عبر واتساب؟',
+      _ => 'Send this order to the suppliers via WhatsApp?',
+    };
+    final sendLabel = switch (lang) {
+      'he' => 'שלח',
+      'ar' => 'إرسال',
+      _ => 'Send',
+    };
+    final cancelLabel = l10n?.tr('cancel') ??
+        switch (lang) {
+          'he' => 'ביטול',
+          'ar' => 'إلغاء',
+          _ => 'Cancel',
+        };
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
+        content: Text(body, style: GoogleFonts.assistant()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(cancelLabel,
+                style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded, size: 18),
+            label: Text(sendLabel,
+                style: GoogleFonts.assistant(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _sendOrderSummaryToCustomer(List<OrderItem> orderItems) async {
+    final customer = _selectedCustomer;
+    if (customer == null) return;
+    if (customer.phones.isEmpty) return;
+    final phone = customer.phones.first;
+    if (phone.trim().isEmpty) return;
+
+    final code = mounted
+        ? Localizations.localeOf(context).languageCode
+        : 'he';
+
+    final message = _buildCustomerOrderMessage(
+      languageCode: code,
+      customer: customer,
+      orderNumber: _existingOrder?.orderNumber,
+      items: orderItems,
+      totalPrice: _totalPrice,
+      assemblyDate: _assemblyRequired ? _assemblyDate : null,
+    );
+
+    await WhatsAppService.sendMessage(phone, message);
+  }
+
+  String _buildCustomerOrderMessage({
+    required String languageCode,
+    required Customer customer,
+    required int? orderNumber,
+    required List<OrderItem> items,
+    required double totalPrice,
+    required DateTime? assemblyDate,
+  }) {
+    final lang =
+        (languageCode == 'he' || languageCode == 'ar') ? languageCode : 'en';
+    final money = NumberFormat('#,##0.00', 'en_US');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    final greetingName =
+        customer.customerName.trim().isNotEmpty ? customer.customerName : customer.cardName;
+
+    final greeting = switch (lang) {
+      'he' => 'שלום $greetingName (כרטיס: ${customer.cardName}),',
+      'ar' => 'مرحبًا $greetingName (البطاقة: ${customer.cardName})،',
+      _ => 'Hello $greetingName (card: ${customer.cardName}),',
+    };
+
+    final orderHeader = switch (lang) {
+      'he' => orderNumber != null
+          ? 'הזמנה חדשה #$orderNumber נפתחה עבורך 🎉'
+          : 'הזמנה חדשה נפתחה עבורך 🎉',
+      'ar' => orderNumber != null
+          ? 'تم فتح طلب جديد #$orderNumber لك 🎉'
+          : 'تم فتح طلب جديد لك 🎉',
+      _ => orderNumber != null
+          ? 'A new order #$orderNumber has been opened for you 🎉'
+          : 'A new order has been opened for you 🎉',
+    };
+
+    final itemsHeader = switch (lang) {
+      'he' => '📦 פריטים:',
+      'ar' => '📦 المنتجات:',
+      _ => '📦 Items:',
+    };
+    final qtyLabel = switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
+    final roomLabel = switch (lang) { 'he' => 'חדר', 'ar' => 'الغرفة', _ => 'Room' };
+    final extrasLabel = switch (lang) { 'he' => 'תוספת', 'ar' => 'إضافة', _ => 'Extras' };
+    final priceLabel = switch (lang) { 'he' => 'מחיר', 'ar' => 'السعر', _ => 'Price' };
+
+    final itemLines = <String>[];
+    for (var i = 0; i < items.length; i++) {
+      final it = items[i];
+      final lineTotal = it.quantity * (it.price + it.extrasPrice);
+      final name = it.name.trim().isEmpty ? '—' : it.name.trim();
+      final extras = (it.extras ?? '').trim();
+      final room = (it.roomLabel ?? '').trim();
+
+      final block = StringBuffer();
+      block.writeln('${i + 1}) $name');
+      final meta = <String>[];
+      meta.add('$qtyLabel: ${it.quantity}');
+      if (room.isNotEmpty) meta.add('$roomLabel: $room');
+      block.writeln('   ${meta.join(' | ')}');
+      if (extras.isNotEmpty) {
+        final extrasPart = it.extrasPrice > 0
+            ? '$extras (+₪${money.format(it.extrasPrice)})'
+            : extras;
+        block.writeln('   $extrasLabel: $extrasPart');
+      }
+      block.write('   $priceLabel: ₪${money.format(lineTotal)}');
+      itemLines.add(block.toString());
+    }
+
+    final totalLabel = switch (lang) {
+      'he' => '💰 סה"כ הזמנה',
+      'ar' => '💰 إجمالي الطلب',
+      _ => '💰 Order total',
+    };
+    final assemblyLabel = switch (lang) {
+      'he' => '🔧 תאריך הרכבה',
+      'ar' => '🔧 تاريخ التركيب',
+      _ => '🔧 Assembly date',
+    };
+
+    final sections = <String>[
+      greeting,
+      orderHeader,
+      '$itemsHeader\n${itemLines.join('\n\n')}',
+      '$totalLabel: ₪${money.format(totalPrice)}',
+    ];
+    if (assemblyDate != null) {
+      sections.add('$assemblyLabel: ${dateFmt.format(assemblyDate)}');
+    }
+    return sections.join('\n\n');
+  }
+
+  String _buildSupplierOrderMessage({
+    required String languageCode,
+    required Supplier supplier,
+    required List<_ItemRow> rows,
+    required int? orderNumber,
+  }) {
+    // Suppliers: Arabic falls back to English (per business preference).
+    final lang = languageCode == 'he' ? 'he' : 'en';
+
+    final supplierName = (supplier.contactName?.trim().isNotEmpty ?? false)
+        ? supplier.contactName!.trim()
+        : supplier.companyName.trim();
+
+    final greeting = switch (lang) {
+      'he' => 'שלום $supplierName,',
+      'ar' => 'مرحبًا $supplierName،',
+      _ => 'Hello $supplierName,',
+    };
+    final intro = switch (lang) {
+      'he' => 'מצורפים פריטים שצריך להזמין:',
+      'ar' => 'المنتجات المطلوب طلبها:',
+      _ => 'Items that need to be ordered:',
+    };
+    final nameLabel = switch (lang) { 'he' => 'שם גוף', 'ar' => 'الاسم', _ => 'Name' };
+    final codeLabel = switch (lang) { 'he' => 'קוד', 'ar' => 'الكود', _ => 'Code' };
+    final qtyLabel = switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
+    final orderRefLabel = switch (lang) {
+      'he' => 'מיועד להזמנה מספר',
+      'ar' => 'لطلب رقم',
+      _ => 'For order number',
+    };
+
+    final itemLines = <String>[];
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final name = r.nameCtrl.text.trim().isEmpty ? '—' : r.nameCtrl.text.trim();
+      final code = r.itemNumberCtrl.text.trim();
+      final qty = r.quantityCtrl.text.trim().isEmpty ? '1' : r.quantityCtrl.text.trim();
+      final block = StringBuffer();
+      block.writeln('${i + 1}) $nameLabel: $name');
+      if (code.isNotEmpty) block.writeln('   $codeLabel: $code');
+      block.write('   $qtyLabel: $qty');
+      itemLines.add(block.toString());
+    }
+
+    final sections = <String>[
+      greeting,
+      intro,
+      itemLines.join('\n\n'),
+    ];
+    if (orderNumber != null) {
+      sections.add('$orderRefLabel: $orderNumber');
+    }
+    return sections.join('\n\n');
+  }
+
   Future<void> _sendOrderToSuppliers() async {
     if (_existingOrder == null) return;
     if (!_canSendToSupplier) return;
+
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await _confirmSendToSuppliers(l10n);
+    if (!confirmed || !mounted) return;
 
     setState(() => _isLoading = true);
     try {
@@ -2880,26 +3180,18 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           continue;
         }
 
-        final itemsText = entry.value.map((item) {
-          final code = item.itemNumberCtrl.text.trim();
-          final name = item.nameCtrl.text.trim();
-          final qty = item.quantityCtrl.text.trim();
-          return '($code)\n($name)\n($qty)';
-        }).join('\n\n');
-
-        final message = 'ניסוח לסוכנים\n$itemsText\n\nנא לאשר שקבלת';
+        final lang = mounted
+            ? Localizations.localeOf(context).languageCode
+            : 'he';
+        final message = _buildSupplierOrderMessage(
+          languageCode: lang,
+          supplier: supplier,
+          rows: entry.value,
+          orderNumber: _existingOrder?.orderNumber,
+        );
 
         final phone = supplier.phone!.replaceAll(RegExp(r'[^\d+]'), '');
-        final url = 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}';
-
-        try {
-          await launchUrl(
-            Uri.parse(url),
-            mode: LaunchMode.externalApplication,
-          );
-        } catch (_) {
-          // WhatsApp not available / error launching URL.
-        }
+        await WhatsAppService.sendMessage(phone, message);
       }
 
       // Lock order: disable editing until admin changes status after confirmation.
@@ -3009,3 +3301,5 @@ class _ItemRow {
     roomCtrl.dispose();
   }
 }
+
+enum _LeaveAction { save, discard, cancel }
