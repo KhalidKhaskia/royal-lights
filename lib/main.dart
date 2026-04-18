@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
+import 'services/session_local_storage.dart';
 import 'config/app_theme.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/providers.dart';
@@ -16,6 +17,9 @@ void main() async {
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
+    authOptions: const FlutterAuthClientOptions(
+      localStorage: SessionLocalStorage(),
+    ),
   );
   runApp(const ProviderScope(child: RoyalLightApp()));
 }
