@@ -28,6 +28,7 @@
   "orderCancelConfirmLead": "سيتم تعليم الطلب كملغى. لا يمكن التراجع.",
   "orderCancelConfirmNoSupplierWa": "لن يُبلَّغ الموردون — لم يُرسَ الطلب للموردين (أو لا توجد بنود بمورد).",
   "orderCancelConfirmSupplierWaWillOpen": "سيتم فتح واتساب لكل مورد مع إشعار إلغاء.",
+  "orderCancelConfirmSupplierNotify": "سيتم إبلاغ الموردين تلقائيًا برسالة إلغاء.",
   "orderCancelConfirmCustomerWa": "سيتم فتح واتساب للعميل برسالة إلغاء قصيرة.",
   "orderCancelConfirmCustomerPhoneNote": "إذا لم يكن هناك هاتف للعميل، لن يُفتح واتساب.",
   "orderCancelConfirmAction": "نعم، إلغاء الطلب",
@@ -289,5 +290,13 @@
   "orderWorkflowNoPendingReadyItems": "تم تعليم جميع العناصر كجاهزة.",
   "orderWorkflowReadyItemsDialogTitle": "عناصر جاهزة للاستلام",
   "orderWorkflowReadyItemsDialogSubtitle": "حدّد العناصر الجاهزة الآن. سنعلّمها كجاهزة ونرسل للعميل واتساب بالعناصر المحددة.",
-  "orderWorkflowReadyItemLabel": "جاهز"
+  "orderWorkflowReadyItemLabel": "جاهز",
+  "orderFormLineStatus": "حالة السطر",
+  "orderFormLineStatusAwaitingSupplier": "في انتظار المورد",
+  "orderFormLineStatusNoSupplier": "ليس عبر المورد",
+  "orderLineSupplierNoteColumn": "ملاحظة للمورد",
+  "orderLineSupplierNoteDialogTitle": "ملاحظة للمورد",
+  "orderLineSupplierNoteDialogHint": "تُرسل فقط لمورد هذا السطر عبر واتساب.",
+  "orderLineSupplierNoteDelete": "حذف الملاحظة",
+  "orderLineSupplierNoteSave": "حفظ"
 }

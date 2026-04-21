@@ -186,12 +186,6 @@ class OrderService {
         .eq('id', id);
   }
 
-  /// Permanently removes the order. [order_items] are removed by ON DELETE CASCADE;
-  /// payments referencing this order are unlinked (ON DELETE SET NULL).
-  Future<void> deleteOrder(String id) async {
-    await _client.from('orders').delete().eq('id', id);
-  }
-
   Future<void> updateItems(
     String orderId,
     List<OrderItem> items,

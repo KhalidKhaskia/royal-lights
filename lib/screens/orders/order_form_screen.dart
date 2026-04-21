@@ -42,19 +42,25 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   bool _assemblyRequired = false;
   DateTime? _assemblyDate;
   final _assemblyPriceController = TextEditingController();
+  final _assemblyPriceFocusNode = FocusNode();
   final _notesController = TextEditingController();
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
   bool _isEdit = false;
   Order? _existingOrder;
+  /// Fingerprint of line items last reflected in a customer WhatsApp (or DB on load).
+  /// Used to avoid re-sending the same summary when saving with no item changes.
+  String? _lastNotifiedCustomerItemsSignature;
   bool get _isReadOnly =>
       _existingOrder != null &&
       (_existingOrder!.status == OrderStatus.sentToSupplier ||
           _existingOrder!.status == OrderStatus.canceled);
 
   bool get _canSendToSupplier =>
-      _existingOrder != null && _existingOrder!.status == OrderStatus.active;
+      _existingOrder != null &&
+      _existingOrder!.status == OrderStatus.active &&
+      !_hasUnsavedChanges;
 
   bool get _waitingSupplierConfirmation =>
       _existingOrder != null &&
@@ -195,6 +201,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
     _notesController.addListener(_markDirty);
     _assemblyPriceController.addListener(_markDirty);
+    _bindSelectAllOnNumericFieldFocus(
+      _assemblyPriceFocusNode,
+      _assemblyPriceController,
+    );
     _customerFocusNode.addListener(_onCustomerFocusChange);
     if (widget.orderId != null) {
       _isEdit = true;
@@ -227,6 +237,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _notesController.text = order.notes ?? '';
         _items = order.items.map((item) {
           final row = _ItemRow();
+          row.orderItemId = item.id;
           row.itemNumberCtrl.text = item.itemNumber ?? '';
           row.nameCtrl.text = item.name;
           row.quantityCtrl.text = item.quantity.toString();
@@ -245,6 +256,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           row.warrantyYears = item.warrantyYears;
           row.imageUrl = item.imageUrl;
           row.deliveryDate = item.deliveryDate ?? order.deliveryDate;
+          row.supplierReceived = item.supplierReceived;
+          row.readyForPickup = item.readyForPickup;
+          row.inventoryDeducted = item.inventoryDeducted;
+          row.supplierNote = item.notes ?? '';
           return row;
         }).toList();
         // If any line item requires assembly, force the order-level switch on.
@@ -253,6 +268,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         }
         if (_items.isEmpty) _items.add(_ItemRow());
         _isLoading = false;
+        _lastNotifiedCustomerItemsSignature =
+            _signatureForOrderItems(order.items);
       });
       _bottomDrawerController.reset();
       if (widget.openBottomDrawerInitially && mounted) {
@@ -985,8 +1002,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         final action = await _confirmLeaveUnsaved(l10n);
         if (action == _LeaveAction.cancel || !mounted) return;
         if (action == _LeaveAction.save) {
-          await _saveOrder();
+          final saved = await _saveOrder();
           if (!mounted) return;
+          if (!saved) return;
         }
         navigator.pop();
       },
@@ -1331,9 +1349,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                           child: TextField(
                                             controller:
                                                 _assemblyPriceController,
+                                            focusNode: _assemblyPriceFocusNode,
                                             keyboardType: const TextInputType
                                                 .numberWithOptions(
-                                                decimal: true),
+                                              decimal: true,
+                                              signed: false,
+                                            ),
+                                            enableSuggestions: false,
+                                            autocorrect: false,
                                             inputFormatters: [
                                               FilteringTextInputFormatter.allow(
                                                 RegExp(r'[0-9.,]'),
@@ -1812,6 +1835,141 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     );
   }
 
+  Future<void> _showLineSupplierNoteDialog(
+    BuildContext context,
+    AppLocalizations? l10n,
+    _ItemRow row,
+  ) async {
+    final ctrl = TextEditingController(text: row.supplierNote);
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          final size = MediaQuery.sizeOf(ctx);
+          final dialogWidth = (size.width - 32).clamp(300.0, 760.0);
+          final editorHeight = (size.height * 0.42).clamp(240.0, 520.0);
+          return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+            title: Text(
+              _orderTableColumnLabel(
+                context,
+                l10n,
+                'orderLineSupplierNoteDialogTitle',
+                en: 'Note for supplier',
+                he: 'הערה לסוכן',
+                ar: 'ملاحظة للمورد',
+              ),
+              style: GoogleFonts.assistant(
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+            content: SizedBox(
+              width: dialogWidth,
+              height: editorHeight + 72,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'orderLineSupplierNoteDialogHint',
+                      en: 'Sent only to this line\'s supplier in WhatsApp.',
+                      he: 'תישלח רק לסוכן של שורה זו בוואטסאפ.',
+                      ar: 'تُرسل فقط لمورد هذا السطر عبر واتساب.',
+                    ),
+                    style: GoogleFonts.assistant(
+                      fontSize: 14,
+                      color: AppTheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: TextField(
+                      controller: ctrl,
+                      enabled: !_isReadOnly,
+                      expands: true,
+                      maxLines: null,
+                      minLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      decoration: orderTableCellDecoration().copyWith(
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      style: GoogleFonts.assistant(fontSize: 16, height: 1.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+            if (!_isReadOnly)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (mounted) {
+                    setState(() {
+                      row.supplierNote = '';
+                      _hasUnsavedChanges = true;
+                    });
+                  }
+                },
+                child: Text(
+                  _orderTableColumnLabel(
+                    context,
+                    l10n,
+                    'orderLineSupplierNoteDelete',
+                    en: 'Delete note',
+                    he: 'מחק הערה',
+                    ar: 'حذف الملاحظة',
+                  ),
+                  style: GoogleFonts.assistant(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.error,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                _isReadOnly
+                    ? MaterialLocalizations.of(ctx).closeButtonLabel
+                    : (l10n?.tr('cancel') ?? 'Cancel'),
+              ),
+            ),
+            if (!_isReadOnly)
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (mounted) {
+                    setState(() {
+                      row.supplierNote = ctrl.text.trim();
+                      _hasUnsavedChanges = true;
+                    });
+                  }
+                },
+                child: Text(
+                  _orderTableColumnLabel(
+                    context,
+                    l10n,
+                    'orderLineSupplierNoteSave',
+                    en: 'Save',
+                    he: 'שמור',
+                    ar: 'حفظ',
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
   Widget _buildOrderSummaryBottomCard(
     BuildContext context,
     AppLocalizations? l10n, {
@@ -2123,6 +2281,138 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     );
   }
 
+  /// Same rule as orders list workflow: line counts for supplier send/receive.
+  bool _lineHasSupplierOnRow(_ItemRow r) =>
+      (r.supplierId ?? '').trim().isNotEmpty;
+
+  void _syncItemRowIdsAndFlagsFromOrder(Order order) {
+    if (order.items.length != _items.length) return;
+    for (var i = 0; i < _items.length; i++) {
+      final src = order.items[i];
+      _items[i].orderItemId = src.id;
+      _items[i].supplierReceived = src.supplierReceived;
+      _items[i].readyForPickup = src.readyForPickup;
+      _items[i].inventoryDeducted = src.inventoryDeducted;
+      _items[i].supplierNote = src.notes ?? '';
+    }
+  }
+
+  WidgetStateProperty<Color>? _orderItemRowHighlight(_ItemRow item) {
+    if (_lineHasSupplierOnRow(item)) {
+      if (item.supplierReceived) {
+        return WidgetStateProperty.all(
+          AppTheme.success.withValues(alpha: 0.12),
+        );
+      }
+      if (item.readyForPickup) {
+        return WidgetStateProperty.all(
+          AppTheme.secondary.withValues(alpha: 0.12),
+        );
+      }
+    }
+    return null;
+  }
+
+  /// Per-line fulfillment: in stock, awaiting supplier, received, or not supplier-sourced.
+  ({
+    String label,
+    String? detail,
+    Color primaryColor,
+    Color? detailColor,
+  }) _orderLineStatusForRow(
+    BuildContext context,
+    AppLocalizations? l10n,
+    _ItemRow item,
+  ) {
+    if (item.existingInStore) {
+      return (
+        label: _orderTableColumnLabel(
+          context,
+          l10n,
+          'orderWorkflowInStore',
+          en: 'In store',
+          he: 'במלאי',
+          ar: 'في المعرض',
+        ),
+        detail: null,
+        primaryColor: AppTheme.success,
+        detailColor: null,
+      );
+    }
+    if (_lineHasSupplierOnRow(item)) {
+      if (item.supplierReceived) {
+        final received = _orderTableColumnLabel(
+          context,
+          l10n,
+          'orderWorkflowReceivedFromSupplier',
+          en: 'Received',
+          he: 'התקבל',
+          ar: 'مستلم',
+        );
+        if (item.readyForPickup) {
+          return (
+            label: _orderTableColumnLabel(
+              context,
+              l10n,
+              'orderWorkflowReadyForPickup',
+              en: 'Ready for pickup',
+              he: 'מוכן לאיסוף',
+              ar: 'جاهز للاستلام',
+            ),
+            detail: null,
+            primaryColor: AppTheme.secondary,
+            detailColor: null,
+          );
+        }
+        return (
+          label: received,
+          detail: null,
+          primaryColor: AppTheme.success,
+          detailColor: null,
+        );
+      }
+      return (
+        label: _orderTableColumnLabel(
+          context,
+          l10n,
+          'orderFormLineStatusAwaitingSupplier',
+          en: 'Awaiting supplier',
+          he: 'ממתין לסוכן',
+          ar: 'في انتظار المورد',
+        ),
+        detail: null,
+        primaryColor: AppTheme.warning,
+        detailColor: null,
+      );
+    }
+    return (
+      label: _orderTableColumnLabel(
+        context,
+        l10n,
+        'orderFormLineStatusNoSupplier',
+        en: 'Not from supplier',
+        he: 'לא דרך סוכן',
+        ar: 'ليس عبر المورد',
+      ),
+      detail: null,
+      primaryColor: AppTheme.onSurfaceVariant,
+      detailColor: null,
+    );
+  }
+
+  /// Same radius and padding as [orderTableCellDecoration] pills; fill + border
+  /// follow the status accent (semantic color of the text).
+  BoxDecoration _orderLineStatusPillDecoration(Color accent) {
+    return BoxDecoration(
+      color: accent.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: accent.withValues(alpha: 0.45),
+        width: 1,
+      ),
+    );
+  }
+
   Widget _orderTableHeader(
     BuildContext context,
     AppLocalizations? l10n,
@@ -2178,7 +2468,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       child: DataTable(
         headingRowHeight: 56,
         dataRowMinHeight: 56,
-        dataRowMaxHeight: 84,
+        dataRowMaxHeight: 92,
         columnSpacing: 12,
         headingRowColor: WidgetStateProperty.all(
           AppTheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -2298,10 +2588,30 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             label: _orderTableHeader(
               context,
               l10n,
+              'orderFormLineStatus',
+              en: 'Line status',
+              he: 'סטטוס שורה',
+              ar: 'حالة السطر',
+            ),
+          ),
+          DataColumn(
+            label: _orderTableHeader(
+              context,
+              l10n,
               'supplier',
               en: 'Supplier',
               he: 'סוכן',
               ar: 'المورد',
+            ),
+          ),
+          DataColumn(
+            label: _orderTableHeader(
+              context,
+              l10n,
+              'orderLineSupplierNoteColumn',
+              en: 'Supplier note',
+              he: 'הערה לסוכן',
+              ar: 'ملاحظة للمورد',
             ),
           ),
           DataColumn(
@@ -2318,7 +2628,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         ],
         rows: List.generate(_items.length, (index) {
           final item = _items[index];
+          final lineStatus = _orderLineStatusForRow(context, l10n, item);
           return DataRow(
+            color: _orderItemRowHighlight(item),
             cells: [
               DataCell(
                 Text(
@@ -2457,7 +2769,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   width: 52,
                   child: TextField(
                     controller: item.quantityCtrl,
-                    keyboardType: TextInputType.text,
+                    focusNode: item.quantityFocusNode,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: false,
+                      signed: false,
+                    ),
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                     enabled: !readOnly,
                     onChanged: (_) {
                       _markDirty();
@@ -2479,7 +2800,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   width: 96,
                   child: TextField(
                     controller: item.priceCtrl,
-                    keyboardType: TextInputType.text,
+                    focusNode: item.priceFocusNode,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: false,
+                    ),
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
                     enabled: !readOnly,
                     onChanged: (_) {
                       _markDirty();
@@ -2514,7 +2844,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   width: 96,
                   child: TextField(
                     controller: item.extrasPriceCtrl,
-                    keyboardType: TextInputType.text,
+                    focusNode: item.extrasPriceFocusNode,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: false,
+                    ),
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
                     enabled: !readOnly,
                     onChanged: (_) {
                       _markDirty();
@@ -2681,6 +3020,54 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
               DataCell(
                 SizedBox(
+                  width: 132,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    decoration: _orderLineStatusPillDecoration(
+                      lineStatus.primaryColor,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          lineStatus.label,
+                          style: cellStyle.copyWith(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: lineStatus.primaryColor,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (lineStatus.detail != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            lineStatus.detail!,
+                            style: cellStyle.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  lineStatus.detailColor ?? AppTheme.secondary,
+                              height: 1.15,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              DataCell(
+                SizedBox(
                   width: 148,
                   child: DropdownMenu<String?>(
                     key: ValueKey(
@@ -2725,6 +3112,48 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 ),
               ),
               DataCell(
+                Center(
+                  child: IconButton(
+                    tooltip: _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'orderLineSupplierNoteColumn',
+                      en: 'Supplier note',
+                      he: 'הערה לסוכן',
+                      ar: 'ملاحظة للمورد',
+                    ),
+                    onPressed: () =>
+                        _showLineSupplierNoteDialog(context, l10n, item),
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.sticky_note_2_outlined,
+                          size: 22,
+                          color: item.supplierNote.trim().isNotEmpty
+                              ? AppTheme.secondary
+                              : AppTheme.onSurfaceVariant,
+                        ),
+                        if (item.supplierNote.trim().isNotEmpty)
+                          Positioned(
+                            right: -1,
+                            top: -1,
+                            child: Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.secondary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              DataCell(
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2762,12 +3191,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     );
   }
 
-  Future<void> _saveOrder() async {
+  Future<bool> _saveOrder() async {
     if (_selectedCustomer == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select a customer')));
-      return;
+      await _showSelectCustomerRequiredDialog();
+      return false;
     }
 
     if (_isReadOnly) {
@@ -2775,22 +3202,26 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         const SnackBar(
             content: Text('Order is locked. Only cancel is allowed.')),
       );
-      return;
+      return false;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      final isCreateFlow = !_isEdit;
       final username = ref.read(currentUsernameProvider);
       final orderItems = _items.map((item) {
         final roomTrim = item.roomCtrl.text.trim();
         return OrderItem(
+          id: item.orderItemId,
           itemNumber: item.itemNumberCtrl.text.trim(),
           name: item.nameCtrl.text.trim(),
           imageUrl: item.imageUrl,
           quantity: int.tryParse(item.quantityCtrl.text) ?? 1,
           extras: item.extrasCtrl.text.trim(),
-          notes: null,
+          notes: item.supplierNote.trim().isEmpty
+              ? null
+              : item.supplierNote.trim(),
           price: double.tryParse(item.priceCtrl.text) ?? 0,
           extrasPrice: double.tryParse(item.extrasPriceCtrl.text) ?? 0,
           assemblyRequired: item.assemblyRequired,
@@ -2799,7 +3230,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           supplierId: item.supplierId,
           deliveryDate: item.deliveryDate,
           existingInStore: item.existingInStore,
+          supplierReceived: item.supplierReceived,
+          readyForPickup: item.readyForPickup,
           inventoryItemId: item.inventoryItemId,
+          inventoryDeducted: item.inventoryDeducted,
           warrantyYears: item.warrantyYears,
           createdBy: username,
           updatedBy: username,
@@ -2808,8 +3242,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
       if (_isEdit && _existingOrder != null) {
         // Update existing order
-        final updatedOrder = await ref.read(orderServiceProvider).update(
-          _existingOrder!.id,
+        final orderId = _existingOrder!.id;
+        await ref.read(orderServiceProvider).update(
+          orderId,
           {
             'customer_id': _selectedCustomer!.id,
             'assembly_required': _assemblyRequired,
@@ -2824,9 +3259,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         );
         await ref
             .read(orderServiceProvider)
-            .updateItems(_existingOrder!.id, orderItems, username);
+            .updateItems(orderId, orderItems, username);
 
-        _existingOrder = updatedOrder;
+        _existingOrder = await ref.read(orderServiceProvider).getById(orderId);
       } else {
         // Create new order
         final order = Order(
@@ -2846,22 +3281,91 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _isEdit = true;
       }
 
+      _syncItemRowIdsAndFlagsFromOrder(_existingOrder!);
+
       if (mounted) {
         setState(() => _hasUnsavedChanges = false);
       }
       ref.invalidate(ordersProvider);
       ref.invalidate(customersProvider);
 
-      // Send order summary to customer (every save).
-      await _sendOrderSummaryToCustomer(orderItems);
+      final itemsSig = _signatureForOrderItems(orderItems);
+      final shouldSendCustomerWa = isCreateFlow ||
+          (_lastNotifiedCustomerItemsSignature != itemsSig);
+      if (shouldSendCustomerWa) {
+        await _sendOrderSummaryToCustomer(
+          orderItems,
+          isOrderItemsUpdate: !isCreateFlow,
+        );
+      }
+      _lastNotifiedCustomerItemsSignature = itemsSig;
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
       );
+      return false;
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _showSelectCustomerRequiredDialog() async {
+    final lang = Localizations.localeOf(context).languageCode;
+    final title = switch (lang) {
+      'he' => 'נא לבחור לקוח',
+      'ar' => 'يرجى اختيار عميل',
+      _ => 'Select a customer',
+    };
+    final body = switch (lang) {
+      'he' =>
+        'כדי לשמור את ההזמנה יש לבחור לקוח בשדה ״שם לקוח״. השינויים יישארו במסך עד שתשמור בהצלחה.',
+      'ar' =>
+        'لحفظ الطلب يجب اختيار عميل في حقل اسم العميل. ستبقى تغييراتك في هذه الشاشة حتى يتم الحفظ بنجاح.',
+      _ =>
+        'To save the order, choose a customer in the customer field. Your changes stay on this screen until you save successfully.',
+    };
+    final okLabel = switch (lang) {
+      'he' => 'הבנתי',
+      'ar' => 'حسناً',
+      _ => 'OK',
+    };
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          title,
+          style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
+        ),
+        content: Text(body, style: GoogleFonts.assistant()),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              okLabel,
+              style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final anchor = _customerSelectorKey.currentContext;
+      if (anchor != null) {
+        Scrollable.ensureVisible(
+          anchor,
+          alignment: 0.12,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      _customerFocusNode.requestFocus();
+    });
   }
 
   Future<_LeaveAction> _confirmLeaveUnsaved(AppLocalizations? l10n) async {
@@ -2968,7 +3472,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     return result ?? false;
   }
 
-  Future<void> _sendOrderSummaryToCustomer(List<OrderItem> orderItems) async {
+  Future<void> _sendOrderSummaryToCustomer(
+    List<OrderItem> orderItems, {
+    bool isOrderItemsUpdate = false,
+  }) async {
     final customer = _selectedCustomer;
     if (customer == null) return;
     if (customer.phones.isEmpty) return;
@@ -2986,9 +3493,42 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       items: orderItems,
       totalPrice: _totalPrice,
       assemblyDate: _assemblyRequired ? _assemblyDate : null,
+      isOrderItemsUpdate: isOrderItemsUpdate,
     );
 
     await WhatsAppService.sendMessage(phone, message);
+  }
+
+  /// Stable fingerprint of line-item fields that affect the customer order summary.
+  String _signatureForOrderItems(List<OrderItem> items) {
+    String money(double v) {
+      if (v.isNaN) return '0.00';
+      return v.toStringAsFixed(2);
+    }
+
+    final parts = <String>[];
+    for (final it in items) {
+      final dateStr = it.deliveryDate == null
+          ? ''
+          : it.deliveryDate!.toIso8601String().split('T').first;
+      parts.add([
+        (it.itemNumber ?? '').trim(),
+        it.name.trim(),
+        it.quantity.toString(),
+        (it.extras ?? '').trim(),
+        money(it.price),
+        money(it.extrasPrice),
+        it.assemblyRequired ? '1' : '0',
+        (it.roomLabel ?? '').trim(),
+        (it.supplierId ?? '').trim(),
+        dateStr,
+        it.warrantyYears.toString(),
+        it.existingInStore ? '1' : '0',
+        (it.inventoryItemId ?? '').trim(),
+        (it.imageUrl ?? '').trim(),
+      ].join('\u001f'));
+    }
+    return '${items.length}\u001e${parts.join('\u001d')}';
   }
 
   String _buildCustomerOrderMessage({
@@ -2998,6 +3538,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     required List<OrderItem> items,
     required double totalPrice,
     required DateTime? assemblyDate,
+    bool isOrderItemsUpdate = false,
   }) {
     final lang =
         (languageCode == 'he' || languageCode == 'ar') ? languageCode : 'en';
@@ -3013,17 +3554,29 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       _ => 'Hello $greetingName (card: ${customer.cardName}),',
     };
 
-    final orderHeader = switch (lang) {
-      'he' => orderNumber != null
-          ? 'הזמנה חדשה #$orderNumber נפתחה עבורך 🎉'
-          : 'הזמנה חדשה נפתחה עבורך 🎉',
-      'ar' => orderNumber != null
-          ? 'تم فتح طلب جديد #$orderNumber لك 🎉'
-          : 'تم فتح طلب جديد لك 🎉',
-      _ => orderNumber != null
-          ? 'A new order #$orderNumber has been opened for you 🎉'
-          : 'A new order has been opened for you 🎉',
-    };
+    final orderHeader = isOrderItemsUpdate
+        ? switch (lang) {
+            'he' => orderNumber != null
+                ? 'עדכון: ההזמנה #$orderNumber עודכנה (שינוי בפריטים) 📋'
+                : 'עדכון: ההזמנה עודכנה (שינוי בפריטים) 📋',
+            'ar' => orderNumber != null
+                ? 'تحديث: تم تعديل الطلب #$orderNumber (تغيير في الأصناف) 📋'
+                : 'تحديث: تم تعديل الطلب (تغيير في الأصناف) 📋',
+            _ => orderNumber != null
+                ? 'Update: order #$orderNumber was revised (line items changed) 📋'
+                : 'Update: your order was revised (line items changed) 📋',
+          }
+        : switch (lang) {
+            'he' => orderNumber != null
+                ? 'הזמנה חדשה #$orderNumber נפתחה עבורך 🎉'
+                : 'הזמנה חדשה נפתחה עבורך 🎉',
+            'ar' => orderNumber != null
+                ? 'تم فتح طلب جديد #$orderNumber لك 🎉'
+                : 'تم فتح طلب جديد لك 🎉',
+            _ => orderNumber != null
+                ? 'A new order #$orderNumber has been opened for you 🎉'
+                : 'A new order has been opened for you 🎉',
+          };
 
     final itemsHeader = switch (lang) {
       'he' => '📦 פריטים:',
@@ -3108,6 +3661,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final nameLabel = switch (lang) { 'he' => 'שם גוף', 'ar' => 'الاسم', _ => 'Name' };
     final codeLabel = switch (lang) { 'he' => 'קוד', 'ar' => 'الكود', _ => 'Code' };
     final qtyLabel = switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
+    final lineNoteLabel = switch (lang) {
+      'he' => 'הערה לפריט זה',
+      'ar' => 'ملاحظة لهذا السطر',
+      _ => 'Note for this item',
+    };
     final orderRefLabel = switch (lang) {
       'he' => 'מיועד להזמנה מספר',
       'ar' => 'لطلب رقم',
@@ -3120,10 +3678,19 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       final name = r.nameCtrl.text.trim().isEmpty ? '—' : r.nameCtrl.text.trim();
       final code = r.itemNumberCtrl.text.trim();
       final qty = r.quantityCtrl.text.trim().isEmpty ? '1' : r.quantityCtrl.text.trim();
+      final noteTrim = r.supplierNote.trim();
       final block = StringBuffer();
       block.writeln('${i + 1}) $nameLabel: $name');
       if (code.isNotEmpty) block.writeln('   $codeLabel: $code');
-      block.write('   $qtyLabel: $qty');
+      block.writeln('   $qtyLabel: $qty');
+      if (noteTrim.isNotEmpty) {
+        // Keep the note visually under this item only (multi-line indented).
+        block.writeln('   $lineNoteLabel:');
+        for (final raw in noteTrim.split('\n')) {
+          final line = raw.trimRight();
+          block.writeln(line.isEmpty ? '' : '      $line');
+        }
+      }
       itemLines.add(block.toString());
     }
 
@@ -3149,6 +3716,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     setState(() => _isLoading = true);
     try {
       final username = ref.read(currentUsernameProvider);
+      // Fresh supplier rows (phone, contact name) for the IDs currently on the form.
+      ref.invalidate(suppliersProvider);
       final suppliers = await ref.read(suppliersProvider.future);
 
       final Map<String, List<_ItemRow>> grouped = {};
@@ -3218,9 +3787,69 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
   }
 
+  Future<bool> _confirmCancelOrderFromForm(AppLocalizations? l10n) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          _orderTableColumnLabel(
+            context,
+            l10n,
+            'orderCancelConfirmTitle',
+            en: 'Cancel this order?',
+            he: 'לבטל את ההזמנה?',
+            ar: 'إلغاء هذا الطلب؟',
+          ),
+          style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          _orderTableColumnLabel(
+            context,
+            l10n,
+            'orderCancelConfirmLead',
+            en: 'The order will be marked as canceled. This cannot be undone.',
+            he: 'ההזמנה תסומן כמבוטלת. לא ניתן לבטל פעולה זו.',
+            ar: 'سيتم تعليم الطلب كملغى. لا يمكن التراجع.',
+          ),
+          style: GoogleFonts.assistant(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              l10n?.tr('cancel') ?? 'Cancel',
+              style: GoogleFonts.assistant(color: AppTheme.onSurfaceVariant),
+            ),
+          ),
+          FilledButton.tonal(
+            style: FilledButton.styleFrom(foregroundColor: AppTheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              _orderTableColumnLabel(
+                context,
+                l10n,
+                'orderCancelConfirmAction',
+                en: 'Yes, cancel order',
+                he: 'כן, בטל הזמנה',
+                ar: 'نعم، إلغاء الطلب',
+              ),
+              style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _cancelSupplierWaitingOrder() async {
     if (_existingOrder == null) return;
     if (!_waitingSupplierConfirmation) return;
+
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await _confirmCancelOrderFromForm(l10n);
+    if (!confirmed || !mounted) return;
 
     setState(() => _isLoading = true);
     try {
@@ -3256,6 +3885,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     _notesController.removeListener(_markDirty);
     _assemblyPriceController.removeListener(_markDirty);
     _notesController.dispose();
+    _assemblyPriceFocusNode.dispose();
     _assemblyPriceController.dispose();
     _customerTextController.dispose();
     _customerFocusNode.dispose();
@@ -3273,25 +3903,63 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 // (removed) _AssemblyGoldSwitch – replaced with SwitchListTile.adaptive to match
 // the inventory add-item toggle style.
 
+/// When a numeric field gains focus, select all text so the next keystroke replaces
+/// the value (avoids e.g. "1" + "5" → "15" on tablets).
+void _bindSelectAllOnNumericFieldFocus(
+  FocusNode node,
+  TextEditingController controller,
+) {
+  node.addListener(() {
+    if (!node.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!node.hasFocus) return;
+      final len = controller.text.length;
+      controller.selection =
+          TextSelection(baseOffset: 0, extentOffset: len);
+    });
+  });
+}
+
 class _ItemRow {
   final itemNumberKey = GlobalKey();
   final nameKey = GlobalKey();
   final itemNumberCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final quantityCtrl = TextEditingController(text: '1');
+  final quantityFocusNode = FocusNode();
   final extrasCtrl = TextEditingController();
   final priceCtrl = TextEditingController(text: '0');
+  final priceFocusNode = FocusNode();
   final extrasPriceCtrl = TextEditingController();
+  final extrasPriceFocusNode = FocusNode();
   final roomCtrl = TextEditingController();
+
+  _ItemRow() {
+    _bindSelectAllOnNumericFieldFocus(quantityFocusNode, quantityCtrl);
+    _bindSelectAllOnNumericFieldFocus(priceFocusNode, priceCtrl);
+    _bindSelectAllOnNumericFieldFocus(extrasPriceFocusNode, extrasPriceCtrl);
+  }
+  /// Persisted `order_items.id` when loaded or after save (used to keep workflow flags).
+  String? orderItemId;
   bool assemblyRequired = false;
   String? supplierId;
   String? inventoryItemId;
   DateTime? deliveryDate;
   bool existingInStore = false;
+  /// From server / workflow: supplier line marked received.
+  bool supplierReceived = false;
+  /// From server / workflow: line marked ready for customer pickup.
+  bool readyForPickup = false;
+  bool inventoryDeducted = false;
   int warrantyYears = 0;
   String? imageUrl;
+  /// Per-line note included only in WhatsApp to this row's supplier.
+  String supplierNote = '';
 
   void dispose() {
+    quantityFocusNode.dispose();
+    priceFocusNode.dispose();
+    extrasPriceFocusNode.dispose();
     itemNumberCtrl.dispose();
     nameCtrl.dispose();
     quantityCtrl.dispose();

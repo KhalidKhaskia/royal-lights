@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   image_url TEXT,              -- 3. Upload/Camera image path
   quantity INTEGER NOT NULL DEFAULT 1, -- 4. Quantity
   extras TEXT,                 -- 5. Extras
-  notes TEXT,                  -- 6. Notes
+  notes TEXT,                  -- 6. Notes (order form: per-line supplier WhatsApp text)
   price NUMERIC(12,2) NOT NULL DEFAULT 0, -- 7. Unit price
   extras_price NUMERIC(12,2) NOT NULL DEFAULT 0, -- Add-ons price (per line)
   assembly_required BOOLEAN NOT NULL DEFAULT FALSE, -- 8. Assembly Required

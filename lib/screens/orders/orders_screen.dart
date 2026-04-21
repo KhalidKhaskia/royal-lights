@@ -42,7 +42,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   int _sortColumnIndex = 4;
   bool _sortAscending = false;
   String? _updatingOrderId;
-  String? _deletingOrderId;
   int _currentPage = 1;
   final int _rowsPerPage = 15;
 
@@ -206,10 +205,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         ? _trLocale(
             context,
             l10n,
-            'orderCancelConfirmSupplierWaWillOpen',
-            en: 'A cancellation message will be sent automatically to each supplier via WhatsApp.',
-            he: 'תישלח הודעת ביטול לכל סוכן בוואטסאפ באופן אוטומטי.',
-            ar: 'سيتم إرسال رسالة إلغاء لكل مورد عبر واتساب تلقائيًا.',
+            'orderCancelConfirmSupplierNotify',
+            en:
+                'Suppliers will be notified automatically with a cancellation message.',
+            he: 'סוכנים יקבלו עדכון ביטול אוטומטית.',
+            ar: 'سيتم إبلاغ الموردين تلقائيًا برسالة إلغاء.',
           )
         : _trLocale(
             context,
@@ -222,23 +222,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             ar:
                 'لن يُبلَّغ الموردون — لم يُرسَ الطلب للموردين (أو لا توجد بنود بمورد).',
           );
-    final customerPara = _trLocale(
-      context,
-      l10n,
-      'orderCancelConfirmCustomerWa',
-      en: 'WhatsApp will open for the customer with a short cancellation message.',
-      he: 'ייפתח WhatsApp ללקוח עם הודעת ביטול קצרה.',
-      ar: 'سيتم فتح واتساب للعميل برسالة إلغاء قصيرة.',
-    );
-    final note = _trLocale(
-      context,
-      l10n,
-      'orderCancelConfirmCustomerPhoneNote',
-      en: 'If the customer has no phone number on file, WhatsApp will not open for them.',
-      he: 'אם אין מספר טלפון ללקוח, WhatsApp לא ייפתח עבורו.',
-      ar: 'إذا لم يكن هناك هاتف للعميل، لن يُفتح واتساب.',
-    );
-    return '$lead\n\n$supplierParagraph\n\n$customerPara\n\n$note';
+    return '$lead\n\n$supplierParagraph';
   }
 
   String _waCustomerOrderCanceled(String lang, Order order) {
@@ -377,88 +361,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       );
     } finally {
       if (mounted) setState(() => _updatingOrderId = null);
-    }
-  }
-
-  Future<void> _confirmAndDeleteOrder(Order order) async {
-    final l10n = AppLocalizations.of(context);
-    if (_deletingOrderId != null || _updatingOrderId != null) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          _trLocale(
-            context,
-            l10n,
-            'deleteOrderConfirmTitle',
-            en: 'Delete this order?',
-            he: 'למחוק את ההזמנה?',
-            ar: 'حذف هذا الطلب؟',
-          ),
-          style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          _trLocale(
-            context,
-            l10n,
-            'deleteOrderConfirmBody',
-            en:
-                'This permanently removes the order and its line items. Payments stay on file but are unlinked from this order.',
-            he:
-                'פעולה זו מוחקת לצמיתות את ההזמנה ואת כל השורות שלה. תשלומים נשארים במערכת אך מנותקים מההזמנה.',
-            ar:
-                'سيُزال الطلب وبنوده نهائيًا. تبقى المدفوعات لكن تُفصل عن هذا الطلب.',
-          ),
-          style: GoogleFonts.assistant(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(_t(l10n, 'cancel', 'Cancel')),
-          ),
-          FilledButton.tonal(
-            style: FilledButton.styleFrom(foregroundColor: AppTheme.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(_t(l10n, 'delete', 'Delete')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-
-    setState(() => _deletingOrderId = order.id);
-    try {
-      await ref.read(orderServiceProvider).deleteOrder(order.id);
-      ref.invalidate(ordersProvider);
-      ref.invalidate(customersProvider);
-      ref.invalidate(totalUnpaidDebtsProvider);
-      final fc = ref.read(ordersCustomerFilterProvider);
-      if (fc != null) ref.invalidate(customerOrdersProvider(fc.id));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _t(l10n, 'success', 'Success'),
-              style: GoogleFonts.assistant(),
-            ),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: AppTheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _deletingOrderId = null);
     }
   }
 
@@ -944,37 +846,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                     _sortAscending = asc;
                                                   }),
                                                 ),
-                                                DataColumn(
-                                                  label: SizedBox(
-                                                    width: 52,
-                                                    child: Align(
-                                                      alignment:
-                                                          Alignment.center,
-                                                      child: Text(
-                                                        _trLocale(
-                                                          context,
-                                                          l10n,
-                                                          'ordersTableDelete',
-                                                          en: 'Delete',
-                                                          he: 'מחיקה',
-                                                          ar: 'حذف',
-                                                        ),
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                        maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                        style: GoogleFonts
-                                                            .assistant(
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
                                               ],
                                               rows: paginatedFiltered
                                                   .map((order) {
@@ -984,16 +855,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                 final isUpdating =
                                                     _updatingOrderId ==
                                                         order.id;
-                                                final isDeleting =
-                                                    _deletingOrderId ==
-                                                        order.id;
 
                                                 return DataRow(
                                                   onSelectChanged: (_) {
                                                     if (_updatingOrderId !=
-                                                            null ||
-                                                        _deletingOrderId !=
-                                                            null) {
+                                                        null) {
                                                       return;
                                                     }
                                                     Navigator.of(context).push(
@@ -1195,14 +1061,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                               FontWeight.w700,
                                                           fontSize: 15,
                                                         ),
-                                                      ),
-                                                    ),
-                                                    DataCell(
-                                                      _buildOrderDeleteCell(
-                                                        context,
-                                                        l10n,
-                                                        order,
-                                                        isDeleting,
                                                       ),
                                                     ),
                                                   ],
@@ -1634,51 +1492,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           onPressed: () => _workflowMarkDelivered(order),
         );
     }
-  }
-
-  Widget _buildOrderDeleteCell(
-    BuildContext context,
-    AppLocalizations? l10n,
-    Order order,
-    bool isDeleting,
-  ) {
-    final busy =
-        _updatingOrderId != null || _deletingOrderId != null;
-    return SizedBox(
-      width: 52,
-      child: Center(
-        child: isDeleting
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : IconButton(
-                tooltip: _trLocale(
-                  context,
-                  l10n,
-                  'ordersTableDelete',
-                  en: 'Delete',
-                  he: 'מחיקה',
-                  ar: 'حذف',
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 36,
-                  minHeight: 36,
-                ),
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  color: AppTheme.error,
-                  size: 22,
-                ),
-                onPressed: busy
-                    ? null
-                    : () => _confirmAndDeleteOrder(order),
-              ),
-      ),
-    );
   }
 
   Widget _buildOrderWorkflowCell(
@@ -2947,44 +2760,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
   Future<void> _workflowAdvanceToPreparing(Order order) async {
     final l10n = AppLocalizations.of(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          _trLocale(
-            context,
-            l10n,
-            'orderWorkflowPreparingConfirmTitle',
-            en: 'Notify customer?',
-            he: 'לעדכן את הלקוח?',
-            ar: 'إشعار العميل؟',
-          ),
-          style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          _trLocale(
-            context,
-            l10n,
-            'orderWorkflowPreparingConfirmBody',
-            en: 'A WhatsApp message will be sent to the customer automatically.',
-            he: 'תישלח ללקוח הודעת WhatsApp באופן אוטומטי.',
-            ar: 'سيتم إرسال رسالة واتساب للعميل تلقائيًا.',
-          ),
-          style: GoogleFonts.assistant(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(_t(l10n, 'cancel', 'Cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(_t(l10n, 'confirm', 'Confirm')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+    if (!mounted) return;
 
     final customer =
         await ref.read(customerServiceProvider).getById(order.customerId);
@@ -3019,46 +2795,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       await _workflowNotifyReadyItemsDialog(order);
       return;
     }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          _trLocale(
-            context,
-            l10n,
-            'orderWorkflowReadyPickupConfirmTitle',
-            en: 'Notify customer?',
-            he: 'לעדכן את הלקוח?',
-            ar: 'إشعار العميل؟',
-          ),
-          style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
-        ),
-        content: Text(
-          _trLocale(
-            context,
-            l10n,
-            'orderWorkflowReadyPickupConfirmBody',
-            en:
-                'Open WhatsApp to tell the customer the order is ready for pickup.',
-            he: 'ייפתח WhatsApp לעדכון שההזמנה מוכנה לאיסוף.',
-            ar:
-                'سيتم فتح واتساب لإبلاغ العميل أن الطلب جاهز للاستلام.',
-          ),
-          style: GoogleFonts.assistant(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(_t(l10n, 'cancel', 'Cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(_t(l10n, 'confirm', 'Confirm')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+    if (!mounted) return;
 
     final customer =
         await ref.read(customerServiceProvider).getById(order.customerId);
