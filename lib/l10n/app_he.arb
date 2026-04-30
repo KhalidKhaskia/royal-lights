@@ -28,6 +28,7 @@
   "orderCancelConfirmLead": "ההזמנה תסומן כמבוטלת. לא ניתן לבטל פעולה זו.",
   "orderCancelConfirmNoSupplierWa": "לא תישלח הודעה לסוכנים — ההזמנה לא נשלחה לסוכנים (או שאין שורות סוכן).",
   "orderCancelConfirmSupplierWaWillOpen": "ייפתח WhatsApp לכל סוכן עם הודעת ביטול.",
+  "orderCancelConfirmSupplierNotify": "סוכנים יקבלו עדכון ביטול אוטומטית.",
   "orderCancelConfirmCustomerWa": "ייפתח WhatsApp ללקוח עם הודעת ביטול קצרה.",
   "orderCancelConfirmCustomerPhoneNote": "אם אין מספר טלפון ללקוח, WhatsApp לא ייפתח עבורו.",
   "orderCancelConfirmAction": "כן, בטל הזמנה",
@@ -289,5 +290,13 @@
   "orderWorkflowNoPendingReadyItems": "כל הפריטים כבר מסומנים כמוכנים.",
   "orderWorkflowReadyItemsDialogTitle": "פריטים שמוכנים לאיסוף",
   "orderWorkflowReadyItemsDialogSubtitle": "בחרו את הפריטים שמוכנים עכשיו. נסמן אותם כמוכנים ונשלח ללקוח WhatsApp עם הפריטים שנבחרו.",
-  "orderWorkflowReadyItemLabel": "מוכן"
+  "orderWorkflowReadyItemLabel": "מוכן",
+  "orderFormLineStatus": "סטטוס שורה",
+  "orderFormLineStatusAwaitingSupplier": "ממתין לסוכן",
+  "orderFormLineStatusNoSupplier": "לא דרך סוכן",
+  "orderLineSupplierNoteColumn": "הערה לסוכן",
+  "orderLineSupplierNoteDialogTitle": "הערה לסוכן",
+  "orderLineSupplierNoteDialogHint": "תישלח רק לסוכן של שורה זו בוואטסאפ.",
+  "orderLineSupplierNoteDelete": "מחק הערה",
+  "orderLineSupplierNoteSave": "שמור"
 }

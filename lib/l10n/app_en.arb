@@ -28,6 +28,7 @@
   "orderCancelConfirmLead": "The order will be marked as canceled. This cannot be undone.",
   "orderCancelConfirmNoSupplierWa": "Suppliers will not be notified — this order was not sent to suppliers (or has no supplier lines).",
   "orderCancelConfirmSupplierWaWillOpen": "WhatsApp will open for each supplier with a cancellation notice.",
+  "orderCancelConfirmSupplierNotify": "Suppliers will be notified automatically with a cancellation message.",
   "orderCancelConfirmCustomerWa": "WhatsApp will open for the customer with a short cancellation message.",
   "orderCancelConfirmCustomerPhoneNote": "If the customer has no phone number on file, WhatsApp will not open for them.",
   "orderCancelConfirmAction": "Yes, cancel order",
@@ -289,5 +290,13 @@
   "orderWorkflowNoPendingReadyItems": "All items are already marked ready.",
   "orderWorkflowReadyItemsDialogTitle": "Items ready for pickup",
   "orderWorkflowReadyItemsDialogSubtitle": "Select the items that are ready now. We will mark them ready and send the customer a WhatsApp with the selected items.",
-  "orderWorkflowReadyItemLabel": "Ready"
+  "orderWorkflowReadyItemLabel": "Ready",
+  "orderFormLineStatus": "Line status",
+  "orderFormLineStatusAwaitingSupplier": "Awaiting supplier",
+  "orderFormLineStatusNoSupplier": "Not from supplier",
+  "orderLineSupplierNoteColumn": "Supplier note",
+  "orderLineSupplierNoteDialogTitle": "Note for supplier",
+  "orderLineSupplierNoteDialogHint": "Sent only to this line's supplier in WhatsApp.",
+  "orderLineSupplierNoteDelete": "Delete note",
+  "orderLineSupplierNoteSave": "Save"
 }

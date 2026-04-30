@@ -727,20 +727,36 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                           _buildColumnHeader(l10n?.tr('username') ?? 'User'),
                         ],
                         rows: filtered.map((payment) {
-                          IconData typeIcon;
-                          Color typeColor;
+                          late final Widget typeLeading;
+                          late final Color typeColor;
                           switch (payment.type) {
                             case PaymentType.cash:
-                              typeIcon = Icons.money;
                               typeColor = AppTheme.success;
+                              typeLeading = Text(
+                                '\u20AA',
+                                style: GoogleFonts.assistant(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: typeColor,
+                                  height: 1,
+                                ),
+                              );
                               break;
                             case PaymentType.credit:
-                              typeIcon = Icons.credit_card;
                               typeColor = AppTheme.secondary;
+                              typeLeading = Icon(
+                                Icons.credit_card,
+                                size: 16,
+                                color: typeColor,
+                              );
                               break;
                             case PaymentType.check:
-                              typeIcon = Icons.description;
                               typeColor = AppTheme.warning;
+                              typeLeading = Icon(
+                                Icons.description,
+                                size: 16,
+                                color: typeColor,
+                              );
                               break;
                           }
 
@@ -766,8 +782,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(typeIcon,
-                                          size: 16, color: typeColor),
+                                      typeLeading,
                                       const SizedBox(width: 8),
                                       Text(
                                         _localizedPaymentType(
@@ -1110,8 +1125,18 @@ void showPaymentDialog(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
-                      prefixIcon: const Icon(Icons.attach_money,
-                          color: AppTheme.onSurfaceVariant),
+                      prefixIcon: dropdownLeadingSlot(
+                        Text(
+                          '\u20AA',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.assistant(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.secondary,
+                            height: 1,
+                          ),
+                        ),
+                      ),
                       filled: true,
                       fillColor: AppTheme.surfaceContainerHighest
                           .withValues(alpha: 0.3),

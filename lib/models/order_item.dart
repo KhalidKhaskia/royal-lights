@@ -13,7 +13,8 @@ class OrderItem {
   final String? imageUrl; // 3. Image
   final int quantity; // 4. Quantity
   final String? extras; // 5. Extras
-  final String? notes; // 6. Notes (optional; order form may omit)
+  /// Line-level text; order form uses this for the per-line supplier (WhatsApp) note.
+  final String? notes; // 6. Notes (optional)
   final double price; // 7. Unit price
   /// Add-ons price per unit (scales with quantity).
   final double extrasPrice;
@@ -128,6 +129,7 @@ class OrderItem {
   Map<String, dynamic> toJson() {
     final roomLabelTrimmed = roomLabel?.trim();
     return {
+      if (id != null && id!.trim().isNotEmpty) 'id': id,
       if (orderId != null) 'order_id': orderId,
       'item_number': itemNumber,
       'name': name,
