@@ -105,7 +105,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     return DateFormat.yMMMd(loc).format(d);
   }
 
-  String _displayCreatedBy(BuildContext context, AppLocalizations? l10n, String? raw) {
+  String _displayCreatedBy(
+      BuildContext context, AppLocalizations? l10n, String? raw) {
     final s = (raw ?? '').trim();
     if (s.isEmpty || s.toLowerCase() == 'unknown') {
       return _trLocale(
@@ -146,6 +147,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       (byPhone[phone] ??= []).add(item);
     }
 
+    bool isFirst = true;
     for (final entry in byPhone.entries) {
       final phone = entry.key.replaceAll(RegExp(r'[^\d+]'), '');
       if (phone.isEmpty) continue;
@@ -165,7 +167,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         itemsText: itemsText,
       );
 
+      if (!isFirst) {
+        await Future.delayed(const Duration(seconds: 10));
+      }
       await WhatsAppService.sendMessage(phone, message);
+      isFirst = false;
     }
   }
 
@@ -206,8 +212,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             context,
             l10n,
             'orderCancelConfirmSupplierNotify',
-            en:
-                'Suppliers will be notified automatically with a cancellation message.',
+            en: 'Suppliers will be notified automatically with a cancellation message.',
             he: 'סוכנים יקבלו עדכון ביטול אוטומטית.',
             ar: 'سيتم إبلاغ الموردين تلقائيًا برسالة إلغاء.',
           )
@@ -215,12 +220,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             context,
             l10n,
             'orderCancelConfirmNoSupplierWa',
-            en:
-                'Suppliers will not be notified — this order was not sent to suppliers (or has no supplier lines).',
-            he:
-                'לא תישלח הודעה לסוכנים — ההזמנה לא נשלחה לסוכנים (או שאין שורות סוכן).',
-            ar:
-                'لن يُبلَّغ الموردون — لم يُرسَ الطلب للموردين (أو لا توجد بنود بمورد).',
+            en: 'Suppliers will not be notified — this order was not sent to suppliers (or has no supplier lines).',
+            he: 'לא תישלח הודעה לסוכנים — ההזמנה לא נשלחה לסוכנים (או שאין שורות סוכן).',
+            ar: 'لن يُبلَّغ الموردون — لم يُرسَ الطلب للموردين (أو لا توجد بنود بمورد).',
           );
     return '$lead\n\n$supplierParagraph';
   }
@@ -230,8 +232,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     return switch (lang) {
       'en' =>
         'Hello — we are canceling order #$n. If you have any questions, please contact us.',
-      'ar' =>
-        'مرحبًا — نُلغي الطلب رقم $n. لأي استفسار يُرجى التواصل معنا.',
+      'ar' => 'مرحبًا — نُلغي الطلب رقم $n. لأي استفسار يُرجى التواصل معنا.',
       _ => 'שלום — אנו מבטלים את הזמנה מספר $n. לשאלות ניתן לפנות אלינו.',
     };
   }
@@ -970,12 +971,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                           context,
                                                           l10n,
                                                           'orderWorkflowStatusLocked',
-                                                          en:
-                                                              'Status updates via the action button only.',
-                                                          he:
-                                                              'הסטטוס מתעדכן רק בכפתור הפעולה.',
-                                                          ar:
-                                                              'يتم تحديث الحالة فقط عبر زر الإجراء.',
+                                                          en: 'Status updates via the action button only.',
+                                                          he: 'הסטטוס מתעדכן רק בכפתור הפעולה.',
+                                                          ar: 'يتم تحديث الحالة فقط عبر زر الإجراء.',
                                                         ),
                                                         child: Row(
                                                           mainAxisSize:
@@ -1023,8 +1021,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                                                 8,
                                                                           ),
                                                                           const SizedBox(
-                                                                              width:
-                                                                                  6),
+                                                                              width: 6),
                                                                           Flexible(
                                                                             child:
                                                                                 Text(
@@ -1032,12 +1029,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                                                 order.status,
                                                                                 l10n,
                                                                               ),
-                                                                              maxLines:
-                                                                                  1,
-                                                                              overflow:
-                                                                                  TextOverflow.ellipsis,
-                                                                              style:
-                                                                                  GoogleFonts.assistant(
+                                                                              maxLines: 1,
+                                                                              overflow: TextOverflow.ellipsis,
+                                                                              style: GoogleFonts.assistant(
                                                                                 color: statusColor,
                                                                                 fontWeight: FontWeight.w700,
                                                                                 fontSize: 12,
@@ -1408,25 +1402,25 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         if (!_orderHasLinesRequiringSupplierSend(order)) {
           return _WorkflowActionDef(
             label: (l) => _trLocale(
-                  context,
-                  l,
-                  'orderWorkflowPreparingForCustomer',
-                  en: 'Preparing for customer',
-                  he: 'בהכנה ללקוח',
-                  ar: 'قيد التحضير للعميل',
-                ),
+              context,
+              l,
+              'orderWorkflowPreparingForCustomer',
+              en: 'Preparing for customer',
+              he: 'בהכנה ללקוח',
+              ar: 'قيد التحضير للعميل',
+            ),
             onPressed: () => _workflowAdvanceToPreparing(order),
           );
         }
         return _WorkflowActionDef(
           label: (l) => _trLocale(
-                context,
-                l,
-                'orderWorkflowSendToSupplier',
-                en: 'Send to supplier',
-                he: 'שליחה לסוכן',
-                ar: 'إرسال للمورد',
-              ),
+            context,
+            l,
+            'orderWorkflowSendToSupplier',
+            en: 'Send to supplier',
+            he: 'שליחה לסוכן',
+            ar: 'إرسال للمورد',
+          ),
           onPressed: () => _workflowSendToSupplier(order),
         );
       case OrderStatus.sentToSupplier:
@@ -1434,61 +1428,61 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         if (_orderHasPendingSupplierLines(order)) {
           return _WorkflowActionDef(
             label: (l) => _trLocale(
-                  context,
-                  l,
-                  'orderWorkflowRecordSupplierDelivery',
-                  en: 'Record supplier delivery',
-                  he: 'רישום אספקה מהסוכן',
-                  ar: 'تسجيل التوريد من المورد',
-                ),
+              context,
+              l,
+              'orderWorkflowRecordSupplierDelivery',
+              en: 'Record supplier delivery',
+              he: 'רישום אספקה מהסוכן',
+              ar: 'تسجيل التوريد من المورد',
+            ),
             onPressed: () => _workflowReceiveItemsDialog(order),
           );
         }
         return _WorkflowActionDef(
           label: (l) => _trLocale(
-                context,
-                l,
-                'orderWorkflowPreparingForCustomer',
-                en: 'Preparing for customer',
-                he: 'בהכנה ללקוח',
-                ar: 'قيد التحضير للعميل',
-              ),
+            context,
+            l,
+            'orderWorkflowPreparingForCustomer',
+            en: 'Preparing for customer',
+            he: 'בהכנה ללקוח',
+            ar: 'قيد التحضير للعميل',
+          ),
           onPressed: () => _workflowAdvanceToPreparing(order),
         );
       case OrderStatus.preparing:
         return _WorkflowActionDef(
           label: (l) => _trLocale(
-                context,
-                l,
-                'orderWorkflowReadyForPickup',
-                en: 'Ready for pickup',
-                he: 'מוכן לאיסוף',
-                ar: 'جاهز للاستلام',
-              ),
+            context,
+            l,
+            'orderWorkflowReadyForPickup',
+            en: 'Ready for pickup',
+            he: 'מוכן לאיסוף',
+            ar: 'جاهز للاستلام',
+          ),
           onPressed: () => _workflowReadyForPickup(order),
         );
       case OrderStatus.awaitingShipping:
         return _WorkflowActionDef(
           label: (l) => _trLocale(
-                context,
-                l,
-                'orderWorkflowMarkCompleted',
-                en: 'Mark order completed',
-                he: 'סימון הזמנה הושלמה',
-                ar: 'تعليم الطلب مكتملاً',
-              ),
+            context,
+            l,
+            'orderWorkflowMarkCompleted',
+            en: 'Mark order completed',
+            he: 'סימון הזמנה הושלמה',
+            ar: 'تعليم الطلب مكتملاً',
+          ),
           onPressed: () => _workflowMarkHandled(order),
         );
       case OrderStatus.handled:
         return _WorkflowActionDef(
           label: (l) => _trLocale(
-                context,
-                l,
-                'orderWorkflowPickedUp',
-                en: 'Picked up — done',
-                he: 'נאסף — סיום',
-                ar: 'تم الاستلام — انتهى',
-              ),
+            context,
+            l,
+            'orderWorkflowPickedUp',
+            en: 'Picked up — done',
+            he: 'נאסף — סיום',
+            ar: 'تم الاستلام — انتهى',
+          ),
           onPressed: () => _workflowMarkDelivered(order),
         );
     }
@@ -1621,8 +1615,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     return switch (lang) {
       'en' =>
         'Good news! Order #$n is ready for pickup. Please visit the store when convenient.',
-      'ar' =>
-        'أخبار سارة! الطلب رقم $n جاهز للاستلام. نرحب بزيارتكم للمتجر.',
+      'ar' => 'أخبار سارة! الطلب رقم $n جاهز للاستلام. نرحب بزيارتكم للمتجر.',
       _ => 'שמחים לעדכן! הזמנה מספר $n מוכנה לאיסוף. נשמח לראותכם בחנות.',
     };
   }
@@ -1638,7 +1631,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         'Hello! Part of your order #$n is ready for pickup:\n\n$itemsBlock\n\nWe will update you when the rest is ready.',
       'ar' =>
         'مرحبًا! جزء من طلبك رقم $n جاهز للاستلام:\n\n$itemsBlock\n\nسنُبلغك عند جاهزية الباقي.',
-      _ => 'שלום! חלק מהזמנה מספר $n מוכן לאיסוף:\n\n$itemsBlock\n\nנעדכן כששאר הפריטים יהיו מוכנים.',
+      _ =>
+        'שלום! חלק מהזמנה מספר $n מוכן לאיסוף:\n\n$itemsBlock\n\nנעדכן כששאר הפריטים יהיו מוכנים.',
     };
   }
 
@@ -1792,12 +1786,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                     context,
                                     l10n,
                                     'orderWorkflowDeliveryDialogSubtitle',
-                                    en:
-                                        'Mark items as they arrive. You can do this in more than one step. The next workflow step unlocks only after every supplier line here is marked received.',
-                                    he:
-                                        'סמנו פריטים כשהם מגיעים — ניתן לעשות זאת בכמה פעמים. השלב הבא ייפתח רק אחרי שכל שורות הסוכן כאן סומנו כהתקבלו.',
-                                    ar:
-                                        'علّم العناصر عند وصولها. يمكن القيام بذلك على أكثر من مرة. لا يُفعّل الخطوة التالية في سير العمل إلا بعد تعليم جميع بنود المورد هنا كمستلمة.',
+                                    en: 'Mark items as they arrive. You can do this in more than one step. The next workflow step unlocks only after every supplier line here is marked received.',
+                                    he: 'סמנו פריטים כשהם מגיעים — ניתן לעשות זאת בכמה פעמים. השלב הבא ייפתח רק אחרי שכל שורות הסוכן כאן סומנו כהתקבלו.',
+                                    ar: 'علّم العناصر عند وصولها. يمكن القيام بذلك على أكثر من مرة. لا يُفعّل الخطوة التالية في سير العمل إلا بعد تعليم جميع بنود المورد هنا كمستلمة.',
                                   ),
                                   style: GoogleFonts.assistant(
                                     fontSize: 13.5,
@@ -1864,8 +1855,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          onPressed: () =>
-                              toggleAllPending(selected.length != pending.length),
+                          onPressed: () => toggleAllPending(
+                              selected.length != pending.length),
                           icon: const Icon(Icons.select_all_rounded, size: 18),
                           label: Text(
                             _trLocale(
@@ -1897,201 +1888,49 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: () {
                                       final id = it.id!;
-                                    if (!_lineHasSupplierForWorkflow(it)) {
-                                      return DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.surfaceContainerHighest
-                                              .withValues(alpha: 0.45),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: AppTheme.outlineVariant
-                                                .withValues(alpha: 0.35),
+                                      if (!_lineHasSupplierForWorkflow(it)) {
+                                        return DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: AppTheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.45),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: AppTheme.outlineVariant
+                                                  .withValues(alpha: 0.35),
+                                            ),
                                           ),
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.inventory_2_outlined,
-                                                color: AppTheme.outlineVariant,
-                                                size: 22,
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      it.name,
-                                                      style:
-                                                          GoogleFonts.assistant(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: AppTheme
-                                                            .onSurfaceVariant,
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      _trLocale(
-                                                        context,
-                                                        l10n,
-                                                        'orderWorkflowInStore',
-                                                        en: 'In store',
-                                                        he: 'במלאי',
-                                                        ar: 'في المعرض',
-                                                      ),
-                                                      style:
-                                                          GoogleFonts.assistant(
-                                                        fontSize: 12,
-                                                        color: AppTheme
-                                                            .onSurfaceVariant,
-                                                      ),
-                                                    ),
-                                                  ],
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 12,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.inventory_2_outlined,
+                                                  color:
+                                                      AppTheme.outlineVariant,
+                                                  size: 22,
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    if (it.supplierReceived) {
-                                      return DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.success
-                                              .withValues(alpha: 0.08),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: AppTheme.success
-                                                .withValues(alpha: 0.35),
-                                          ),
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.check_circle_rounded,
-                                                color: AppTheme.success,
-                                                size: 22,
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      it.name,
-                                                      style:
-                                                          GoogleFonts.assistant(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: AppTheme
-                                                            .onSurfaceVariant,
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        it.name,
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: AppTheme
+                                                              .onSurfaceVariant,
+                                                        ),
                                                       ),
-                                                    ),
-                                                    Text(
-                                                      it.existingInStore
-                                                          ? _trLocale(
-                                                              context,
-                                                              l10n,
-                                                              'orderWorkflowExistsInStock',
-                                                              en: 'In stock',
-                                                              he: 'קיים במלאי',
-                                                              ar: 'متوفر بالمخزون',
-                                                            )
-                                                          : _trLocale(
-                                                              context,
-                                                              l10n,
-                                                              'orderWorkflowReceivedFromSupplier',
-                                                              en: 'Received',
-                                                              he: 'התקבל',
-                                                              ar: 'مستلم',
-                                                            ),
-                                                      style:
-                                                          GoogleFonts.assistant(
-                                                        fontSize: 12,
-                                                        color: AppTheme.success,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    final checked = selected.contains(id);
-                                    return Material(
-                                      color: AppTheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(12),
-                                        onTap: () {
-                                          setLocal(() {
-                                            if (checked) {
-                                              selected.remove(id);
-                                            } else {
-                                              selected.add(id);
-                                            }
-                                          });
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 10,
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 2,
-                                                ),
-                                                child:
-                                                    AppAnimatedSquareCheckbox(
-                                                  value: checked,
-                                                  activeColor: AppTheme.secondary,
-                                                  onChanged: (v) {
-                                                    setLocal(() {
-                                                      if (v == true) {
-                                                        selected.add(id);
-                                                      } else {
-                                                        selected.remove(id);
-                                                      }
-                                                    });
-                                                  },
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      it.name,
-                                                      style: GoogleFonts
-                                                          .assistant(
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                      ),
-                                                    ),
-                                                    if (it.existingInStore) ...[
-                                                      const SizedBox(height: 2),
                                                       Text(
                                                         _trLocale(
                                                           context,
@@ -2103,33 +1942,196 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                         ),
                                                         style: GoogleFonts
                                                             .assistant(
-                                                          fontSize: 11,
+                                                          fontSize: 12,
                                                           color: AppTheme
-                                                              .onSurfaceVariant
-                                                              .withValues(
-                                                            alpha: 0.85,
-                                                          ),
+                                                              .onSurfaceVariant,
                                                         ),
                                                       ),
                                                     ],
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      '×${it.quantity}',
-                                                      style: GoogleFonts
-                                                          .assistant(
-                                                        fontSize: 12,
-                                                        color: AppTheme
-                                                            .onSurfaceVariant,
-                                                      ),
-                                                    ),
-                                                  ],
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      if (it.supplierReceived) {
+                                        return DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.success
+                                                .withValues(alpha: 0.08),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: AppTheme.success
+                                                  .withValues(alpha: 0.35),
+                                            ),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 12,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.check_circle_rounded,
+                                                  color: AppTheme.success,
+                                                  size: 22,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        it.name,
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: AppTheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        it.existingInStore
+                                                            ? _trLocale(
+                                                                context,
+                                                                l10n,
+                                                                'orderWorkflowExistsInStock',
+                                                                en: 'In stock',
+                                                                he: 'קיים במלאי',
+                                                                ar: 'متوفر بالمخزون',
+                                                              )
+                                                            : _trLocale(
+                                                                context,
+                                                                l10n,
+                                                                'orderWorkflowReceivedFromSupplier',
+                                                                en: 'Received',
+                                                                he: 'התקבל',
+                                                                ar: 'مستلم',
+                                                              ),
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontSize: 12,
+                                                          color:
+                                                              AppTheme.success,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      final checked = selected.contains(id);
+                                      return Material(
+                                        color: AppTheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: InkWell(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          onTap: () {
+                                            setLocal(() {
+                                              if (checked) {
+                                                selected.remove(id);
+                                              } else {
+                                                selected.add(id);
+                                              }
+                                            });
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    top: 2,
+                                                  ),
+                                                  child:
+                                                      AppAnimatedSquareCheckbox(
+                                                    value: checked,
+                                                    activeColor:
+                                                        AppTheme.secondary,
+                                                    onChanged: (v) {
+                                                      setLocal(() {
+                                                        if (v == true) {
+                                                          selected.add(id);
+                                                        } else {
+                                                          selected.remove(id);
+                                                        }
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        it.name,
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                      if (it
+                                                          .existingInStore) ...[
+                                                        const SizedBox(
+                                                            height: 2),
+                                                        Text(
+                                                          _trLocale(
+                                                            context,
+                                                            l10n,
+                                                            'orderWorkflowInStore',
+                                                            en: 'In store',
+                                                            he: 'במלאי',
+                                                            ar: 'في المعرض',
+                                                          ),
+                                                          style: GoogleFonts
+                                                              .assistant(
+                                                            fontSize: 11,
+                                                            color: AppTheme
+                                                                .onSurfaceVariant
+                                                                .withValues(
+                                                              alpha: 0.85,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        '×${it.quantity}',
+                                                        style: GoogleFonts
+                                                            .assistant(
+                                                          fontSize: 12,
+                                                          color: AppTheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    );
+                                      );
                                     }(),
                                   ),
                             ],
@@ -2281,7 +2283,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             }
 
             final mq = MediaQuery.sizeOf(dialogContext);
-            final readyCount = order.items.where((i) => i.readyForPickup).length;
+            final readyCount =
+                order.items.where((i) => i.readyForPickup).length;
             final totalCount = order.items.length;
             final progressLabel = () {
               final code = Localizations.localeOf(context).languageCode;
@@ -2357,12 +2360,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                     context,
                                     l10n,
                                     'orderWorkflowReadyItemsDialogSubtitle',
-                                    en:
-                                        'Select the items that are ready now. We will mark them ready and send the customer a WhatsApp with the selected items.',
-                                    he:
-                                        'בחרו את הפריטים שמוכנים עכשיו. נסמן אותם כמוכנים ונשלח ללקוח WhatsApp עם הפריטים שנבחרו.',
-                                    ar:
-                                        'حدّد العناصر الجاهزة الآن. سنعلّمها كجاهزة ونرسل للعميل واتساب بالعناصر المحددة.',
+                                    en: 'Select the items that are ready now. We will mark them ready and send the customer a WhatsApp with the selected items.',
+                                    he: 'בחרו את הפריטים שמוכנים עכשיו. נסמן אותם כמוכנים ונשלח ללקוח WhatsApp עם הפריטים שנבחרו.',
+                                    ar: 'حدّد العناصر الجاهزة الآن. سنعلّمها كجاهزة ونرسل للعميل واتساب بالعناصر المحددة.',
                                   ),
                                   style: GoogleFonts.assistant(
                                     fontSize: 13.5,
@@ -2486,7 +2486,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                 children: [
                                                   Icon(
                                                     Icons.check_circle_rounded,
-                                                  color: AppTheme.secondary,
+                                                    color: AppTheme.secondary,
                                                     size: 22,
                                                   ),
                                                   const SizedBox(width: 12),
@@ -2518,8 +2518,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                           style: GoogleFonts
                                                               .assistant(
                                                             fontSize: 12,
-                                                            color:
-                                                              AppTheme.secondary,
+                                                            color: AppTheme
+                                                                .secondary,
                                                           ),
                                                         ),
                                                       ],
@@ -2723,7 +2723,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         final lang = Localizations.localeOf(context).languageCode;
         final isFinalBatch = selected.length == notReady.length;
         if (isFinalBatch) {
-          await _openWhatsAppToPhone(phone, _waCustomerReadyPickup(lang, order));
+          await _openWhatsAppToPhone(
+              phone, _waCustomerReadyPickup(lang, order));
           await ref.read(orderServiceProvider).updateStatus(
                 order.id,
                 OrderStatus.awaitingShipping.dbValue,
@@ -2731,8 +2732,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               );
         } else {
           final selectedItems = order.items
-            .where((i) => i.id != null && selected.contains(i.id))
-            .toList();
+              .where((i) => i.id != null && selected.contains(i.id))
+              .toList();
           final itemsBlock = selectedItems
               .map((it) => '${it.name}\n×${it.quantity}')
               .join('\n\n');
@@ -2820,11 +2821,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     }
 
     final langPickup = Localizations.localeOf(context).languageCode;
-    await _openWhatsAppToPhone(phone, _waCustomerReadyPickup(langPickup, order));
+    await _openWhatsAppToPhone(
+        phone, _waCustomerReadyPickup(langPickup, order));
 
     if (!mounted) return;
-    await _updateOrderStatus(
-        order.id, OrderStatus.awaitingShipping.dbValue);
+    await _updateOrderStatus(order.id, OrderStatus.awaitingShipping.dbValue);
   }
 
   Future<void> _workflowMarkHandled(Order order) async {
@@ -2848,10 +2849,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             context,
             l10n,
             'orderWorkflowMarkCompletedConfirmBody',
-            en:
-                'Mark this order as completed (awaiting customer pickup).',
-            he:
-                'לסמן שההזמנה הושלמה (ממתינה לאיסוף על ידי הלקוח).',
+            en: 'Mark this order as completed (awaiting customer pickup).',
+            he: 'לסמן שההזמנה הושלמה (ממתינה לאיסוף על ידי הלקוח).',
             ar: 'تعليم أن الطلب مكتمل (في انتظار استلام العميل).',
           ),
           style: GoogleFonts.assistant(),
@@ -2936,9 +2935,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final phone = customer.phones.first.trim();
     if (phone.isEmpty) return;
 
-    final lang = mounted
-        ? Localizations.localeOf(context).languageCode
-        : 'he';
+    final lang = mounted ? Localizations.localeOf(context).languageCode : 'he';
     final status = OrderStatusExtension.fromString(newStatusDb);
     final message = _buildGenericStatusMessage(
       languageCode: lang,
@@ -2977,25 +2974,41 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     switch (lang) {
       case 'he':
         switch (s) {
-          case OrderStatus.active: return 'פעיל';
-          case OrderStatus.preparing: return 'בהכנה';
-          case OrderStatus.sentToSupplier: return 'נשלח לסוכן';
-          case OrderStatus.inAssembly: return 'בהרכבה';
-          case OrderStatus.awaitingShipping: return 'ממתין למשלוח';
-          case OrderStatus.handled: return 'טופל';
-          case OrderStatus.delivered: return 'נמסר';
-          case OrderStatus.canceled: return 'בוטל';
+          case OrderStatus.active:
+            return 'פעיל';
+          case OrderStatus.preparing:
+            return 'בהכנה';
+          case OrderStatus.sentToSupplier:
+            return 'נשלח לסוכן';
+          case OrderStatus.inAssembly:
+            return 'בהרכבה';
+          case OrderStatus.awaitingShipping:
+            return 'ממתין למשלוח';
+          case OrderStatus.handled:
+            return 'טופל';
+          case OrderStatus.delivered:
+            return 'נמסר';
+          case OrderStatus.canceled:
+            return 'בוטל';
         }
       case 'ar':
         switch (s) {
-          case OrderStatus.active: return 'نشِط';
-          case OrderStatus.preparing: return 'قيد التحضير';
-          case OrderStatus.sentToSupplier: return 'أُرسل للمورد';
-          case OrderStatus.inAssembly: return 'قيد التركيب';
-          case OrderStatus.awaitingShipping: return 'بانتظار الشحن';
-          case OrderStatus.handled: return 'تمت المعالجة';
-          case OrderStatus.delivered: return 'تم التسليم';
-          case OrderStatus.canceled: return 'ملغي';
+          case OrderStatus.active:
+            return 'نشِط';
+          case OrderStatus.preparing:
+            return 'قيد التحضير';
+          case OrderStatus.sentToSupplier:
+            return 'أُرسل للمورد';
+          case OrderStatus.inAssembly:
+            return 'قيد التركيب';
+          case OrderStatus.awaitingShipping:
+            return 'بانتظار الشحن';
+          case OrderStatus.handled:
+            return 'تمت المعالجة';
+          case OrderStatus.delivered:
+            return 'تم التسليم';
+          case OrderStatus.canceled:
+            return 'ملغي';
         }
       default:
         return s.dbValue;
