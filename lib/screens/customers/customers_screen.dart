@@ -867,6 +867,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                 label: l10n?.tr('phones') ?? 'Phones',
                 icon: Icons.phone_outlined,
                 hint: 'Comma separated',
+                keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 14),
               _buildDialogField(
@@ -930,6 +931,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
     required IconData icon,
     String? hint,
     int maxLines = 1,
+    TextInputType? keyboardType,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -942,6 +944,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
       child: TextField(
         controller: controller,
         maxLines: maxLines,
+        keyboardType: keyboardType,
         style: GoogleFonts.assistant(fontSize: 14, color: AppTheme.onSurface),
         decoration: InputDecoration(
           labelText: label,

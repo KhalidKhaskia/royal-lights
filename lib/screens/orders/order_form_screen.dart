@@ -23,6 +23,7 @@ import '../../widgets/barcode_scan_dialog.dart';
 class OrderFormScreen extends ConsumerStatefulWidget {
   final String? orderId;
   final Customer? initialCustomer;
+
   /// Opens the bottom notes/totals drawer after load (e.g. Orders list "Send to supplier").
   final bool openBottomDrawerInitially;
   const OrderFormScreen({
@@ -49,6 +50,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   bool _hasUnsavedChanges = false;
   bool _isEdit = false;
   Order? _existingOrder;
+
   /// Fingerprint of line items last reflected in a customer WhatsApp (or DB on load).
   /// Used to avoid re-sending the same summary when saving with no item changes.
   String? _lastNotifiedCustomerItemsSignature;
@@ -246,10 +248,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           row.extrasPriceCtrl.text =
               item.extrasPrice == 0 ? '' : item.extrasPrice.toString();
           row.assemblyRequired = item.assemblyRequired;
-          row.roomCtrl.text = (item.roomLabel != null &&
-                  item.roomLabel!.trim().isNotEmpty)
-              ? item.roomLabel!.trim()
-              : (item.roomName ?? '');
+          row.roomCtrl.text =
+              (item.roomLabel != null && item.roomLabel!.trim().isNotEmpty)
+                  ? item.roomLabel!.trim()
+                  : (item.roomName ?? '');
           row.supplierId = item.supplierId;
           row.existingInStore = item.existingInStore;
           row.inventoryItemId = item.inventoryItemId;
@@ -592,7 +594,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         return Dialog(
           backgroundColor: AppTheme.surfaceContainerLowest,
           surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
             child: Padding(
@@ -653,17 +656,21 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       return;
     }
 
-    final filtered = items.where((it) {
-      final desc = it.description.toLowerCase();
-      final brand = (it.brand ?? '').toLowerCase();
-      final barcode = (it.barcode ?? '').toLowerCase();
-      final matches =
-          desc.contains(query) || brand.contains(query) || barcode.contains(query);
-      if (!matches) return false;
-      // When searching by name, show "items that there is" (in stock) first/only.
-      if (fromNameField) return it.availableStock > 0;
-      return true;
-    }).take(12).toList();
+    final filtered = items
+        .where((it) {
+          final desc = it.description.toLowerCase();
+          final brand = (it.brand ?? '').toLowerCase();
+          final barcode = (it.barcode ?? '').toLowerCase();
+          final matches = desc.contains(query) ||
+              brand.contains(query) ||
+              barcode.contains(query);
+          if (!matches) return false;
+          // When searching by name, show "items that there is" (in stock) first/only.
+          if (fromNameField) return it.availableStock > 0;
+          return true;
+        })
+        .take(12)
+        .toList();
 
     _hideInventoryDropdown();
     _inventoryOverlayEntry = OverlayEntry(
@@ -685,8 +692,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               );
 
               // In RTL, align the menu's right edge to the field's right edge.
-              final rawLeft =
-                  isRtl ? (pos.dx + size.width - desiredW) : pos.dx;
+              final rawLeft = isRtl ? (pos.dx + size.width - desiredW) : pos.dx;
               return rawLeft.clamp(minLeft, maxLeft);
             }(),
             top: pos.dy + size.height + 4,
@@ -716,13 +722,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                         separatorBuilder: (_, __) => Divider(
                           height: 1,
                           thickness: 1,
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.12),
+                          color:
+                              AppTheme.outlineVariant.withValues(alpha: 0.12),
                         ),
                         itemBuilder: (context, i) {
                           final it = filtered[i];
                           final subtitleParts = <String>[
-                            if ((it.brand ?? '').trim().isNotEmpty) it.brand!.trim(),
-                            if ((it.barcode ?? '').trim().isNotEmpty) it.barcode!.trim(),
+                            if ((it.brand ?? '').trim().isNotEmpty)
+                              it.brand!.trim(),
+                            if ((it.barcode ?? '').trim().isNotEmpty)
+                              it.barcode!.trim(),
                           ];
                           return InkWell(
                             onTap: () {
@@ -767,7 +776,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           it.description,
@@ -1009,251 +1019,395 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         navigator.pop();
       },
       child: Scaffold(
-      resizeToAvoidBottomInset: !isTabletLayout,
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _orderFormAppBarTitle(context, l10n),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        resizeToAvoidBottomInset: !isTabletLayout,
+        appBar: AppBar(
+          centerTitle: false,
+          titleSpacing: 16,
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _orderFormAppBarTitle(context, l10n),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _orderSaveStatusBadge(context, l10n),
-          ],
+              const SizedBox(width: 8),
+              _orderSaveStatusBadge(context, l10n),
+            ],
+          ),
+          actions: const [],
         ),
-        actions: const [],
-      ),
-      body: AppLoadingOverlay(
-        isLoading: _isLoading,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 6, 20, 72),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Order header — one row, full width of scroll content
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color:
-                              AppTheme.outlineVariant.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
+        body: AppLoadingOverlay(
+          isLoading: _isLoading,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 72),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Order header — one row, full width of scroll content
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceContainerLowest,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.2),
                           ),
-                          child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    flex: 5,
-                                    child: customersAsync.when(
-                                  data: (customers) {
-                                    if (_isEdit &&
-                                        _existingOrder != null &&
-                                        _selectedCustomer == null) {
-                                      final c = customers
-                                          .where(
-                                            (x) =>
-                                                x.id ==
-                                                _existingOrder!.customerId,
-                                          )
-                                          .firstOrNull;
-                                      _selectedCustomer = c;
-                                      if (c != null) {
-                                        _customerTextController.text =
-                                            '${c.cardName} - ${c.customerName}';
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: customersAsync.when(
+                                    data: (customers) {
+                                      if (_isEdit &&
+                                          _existingOrder != null &&
+                                          _selectedCustomer == null) {
+                                        final c = customers
+                                            .where(
+                                              (x) =>
+                                                  x.id ==
+                                                  _existingOrder!.customerId,
+                                            )
+                                            .firstOrNull;
+                                        _selectedCustomer = c;
+                                        if (c != null) {
+                                          _customerTextController.text =
+                                              '${c.cardName} - ${c.customerName}';
+                                        }
                                       }
-                                    }
-                                    return KeyedSubtree(
-                                      key: _customerSelectorKey,
-                                      child: TextField(
-                                        controller: _customerTextController,
-                                        focusNode: _customerFocusNode,
-                                        enabled: !_isReadOnly,
-                                        readOnly: _isReadOnly,
-                                        onChanged: (value) {
-                                          final sel = _selectedCustomer;
-                                          if (sel != null) {
-                                            final expected =
-                                                '${sel.cardName} - ${sel.customerName}';
-                                            if (value != expected) {
-                                              _selectedCustomer = null;
+                                      return KeyedSubtree(
+                                        key: _customerSelectorKey,
+                                        child: TextField(
+                                          controller: _customerTextController,
+                                          focusNode: _customerFocusNode,
+                                          enabled: !_isReadOnly,
+                                          readOnly: _isReadOnly,
+                                          onChanged: (value) {
+                                            final sel = _selectedCustomer;
+                                            if (sel != null) {
+                                              final expected =
+                                                  '${sel.cardName} - ${sel.customerName}';
+                                              if (value != expected) {
+                                                _selectedCustomer = null;
+                                              }
                                             }
-                                          }
-                                          setState(() {});
-                                          _customerOverlayEntry
-                                              ?.markNeedsBuild();
-                                          if (_customerOverlayEntry == null) {
-                                            _showCustomerPicker(
+                                            setState(() {});
+                                            _customerOverlayEntry
+                                                ?.markNeedsBuild();
+                                            if (_customerOverlayEntry == null) {
+                                              _showCustomerPicker(
+                                                context,
+                                                customers,
+                                                l10n,
+                                              );
+                                            }
+                                          },
+                                          onTap: () {
+                                            if (_customerOverlayEntry == null) {
+                                              _showCustomerPicker(
+                                                context,
+                                                customers,
+                                                l10n,
+                                              );
+                                            }
+                                          },
+                                          style: GoogleFonts.assistant(
+                                            fontSize: 15,
+                                            color: AppTheme.onSurface,
+                                          ),
+                                          decoration: InputDecoration(
+                                            labelText: _orderTableColumnLabel(
                                               context,
-                                              customers,
                                               l10n,
-                                            );
-                                          }
-                                        },
-                                        onTap: () {
-                                          if (_customerOverlayEntry == null) {
-                                            _showCustomerPicker(
-                                              context,
-                                              customers,
-                                              l10n,
-                                            );
-                                          }
-                                        },
-                                        style: GoogleFonts.assistant(
-                                          fontSize: 15,
-                                          color: AppTheme.onSurface,
-                                        ),
-                                        decoration: InputDecoration(
-                                          labelText: _orderTableColumnLabel(
-                                            context,
-                                            l10n,
-                                            'customerName',
-                                            en: 'Customer Name',
-                                            he: 'שם לקוח',
-                                            ar: 'اسم العميل',
-                                          ),
-                                          labelStyle: GoogleFonts.assistant(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppTheme.onSurfaceVariant,
-                                          ),
-                                          floatingLabelStyle:
-                                              GoogleFonts.assistant(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppTheme.secondary,
-                                          ),
-                                          prefixIcon: dropdownLeadingSlot(
-                                            const Icon(
-                                              Icons.person_outline,
-                                              size: 18,
+                                              'customerName',
+                                              en: 'Customer Name',
+                                              he: 'שם לקוח',
+                                              ar: 'اسم العميل',
+                                            ),
+                                            labelStyle: GoogleFonts.assistant(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.onSurfaceVariant,
+                                            ),
+                                            floatingLabelStyle:
+                                                GoogleFonts.assistant(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
                                               color: AppTheme.secondary,
                                             ),
-                                          ),
-                                          suffixIcon: Icon(
-                                            Icons.arrow_drop_down_rounded,
-                                            color: AppTheme.secondary
-                                                .withValues(alpha: 0.85),
-                                          ),
-                                          filled: true,
-                                          fillColor: AppTheme
-                                              .surfaceContainerHighest
-                                              .withValues(alpha: 0.55),
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            borderSide: BorderSide(
-                                              color: AppTheme.outlineVariant
-                                                  .withValues(alpha: 0.22),
+                                            prefixIcon: dropdownLeadingSlot(
+                                              const Icon(
+                                                Icons.person_outline,
+                                                size: 18,
+                                                color: AppTheme.secondary,
+                                              ),
                                             ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            borderSide: BorderSide(
-                                              color: AppTheme.outlineVariant
-                                                  .withValues(alpha: 0.22),
+                                            suffixIcon: Icon(
+                                              Icons.arrow_drop_down_rounded,
+                                              color: AppTheme.secondary
+                                                  .withValues(alpha: 0.85),
                                             ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            borderSide: const BorderSide(
-                                              color: AppTheme.secondary,
-                                              width: 1.8,
+                                            filled: true,
+                                            fillColor: AppTheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.55),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.outlineVariant
+                                                    .withValues(alpha: 0.22),
+                                              ),
                                             ),
-                                          ),
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 12,
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.outlineVariant
+                                                    .withValues(alpha: 0.22),
+                                              ),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              borderSide: const BorderSide(
+                                                color: AppTheme.secondary,
+                                                width: 1.8,
+                                              ),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 12,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                  loading: () =>
-                                      const CircularProgressIndicator(),
-                                  error: (_, __) =>
-                                      const Text('Error loading customers'),
+                                      );
+                                    },
+                                    loading: () =>
+                                        const CircularProgressIndicator(),
+                                    error: (_, __) =>
+                                        const Text('Error loading customers'),
+                                  ),
                                 ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  SizedBox(
-                                    width: 210,
-                                    child: SwitchListTile.adaptive(
-                                      value: _assemblyRequired,
-                                      onChanged: _isReadOnly
-                                          ? null
-                                          : (v) {
-                                              setState(() {
-                                                _assemblyRequired = v;
-                                                for (final item in _items) {
-                                                  item.assemblyRequired = v;
-                                                }
-                                              });
-                                            },
-                                      title: Text(
-                                        _orderTableColumnLabel(
-                                          context,
-                                          l10n,
-                                          'assemblyRequired',
-                                          en: 'Assembly Required',
-                                          he: 'דרוש הרכבה',
-                                          ar: 'يتطلب تركيب',
-                                        ),
-                                        style: GoogleFonts.assistant(
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.onSurface,
-                                        ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 210,
+                                  child: SwitchListTile.adaptive(
+                                    value: _assemblyRequired,
+                                    onChanged: _isReadOnly
+                                        ? null
+                                        : (v) {
+                                            setState(() {
+                                              _assemblyRequired = v;
+                                              for (final item in _items) {
+                                                item.assemblyRequired = v;
+                                              }
+                                            });
+                                          },
+                                    title: Text(
+                                      _orderTableColumnLabel(
+                                        context,
+                                        l10n,
+                                        'assemblyRequired',
+                                        en: 'Assembly Required',
+                                        he: 'דרוש הרכבה',
+                                        ar: 'يتطلب تركيب',
                                       ),
-                                      contentPadding: EdgeInsets.zero,
+                                      style: GoogleFonts.assistant(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.onSurface,
+                                      ),
                                     ),
+                                    contentPadding: EdgeInsets.zero,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    flex: 4,
-                                    child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: _assemblyRequired ? 1 : 0,
-                                child: IgnorePointer(
-                                  ignoring: !_assemblyRequired || _isReadOnly,
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                        Expanded(
-                                          flex: 3,
-                                          child: InkWell(
-                                            onTap: _pickAssemblyDate,
-                                            child: InputDecorator(
-                                              isEmpty: _assemblyDate == null,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  flex: 4,
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 200),
+                                    opacity: _assemblyRequired ? 1 : 0,
+                                    child: IgnorePointer(
+                                      ignoring:
+                                          !_assemblyRequired || _isReadOnly,
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            flex: 3,
+                                            child: InkWell(
+                                              onTap: _pickAssemblyDate,
+                                              child: InputDecorator(
+                                                isEmpty: _assemblyDate == null,
+                                                decoration: InputDecoration(
+                                                  labelText:
+                                                      _orderTableColumnLabel(
+                                                    context,
+                                                    l10n,
+                                                    'assemblyDate',
+                                                    en: 'Assembly Date',
+                                                    he: 'תאריך הרכבה',
+                                                    ar: 'تاريخ التركيب',
+                                                  ),
+                                                  labelStyle:
+                                                      GoogleFonts.assistant(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppTheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                  floatingLabelStyle:
+                                                      GoogleFonts.assistant(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppTheme.secondary,
+                                                  ),
+                                                  prefixIcon: const Icon(
+                                                    Icons
+                                                        .calendar_today_outlined,
+                                                    color: AppTheme.secondary,
+                                                  ),
+                                                  filled: true,
+                                                  fillColor: AppTheme
+                                                      .surfaceContainerHighest
+                                                      .withValues(alpha: 0.55),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            18),
+                                                    borderSide: BorderSide(
+                                                      color: AppTheme
+                                                          .outlineVariant
+                                                          .withValues(
+                                                              alpha: 0.22),
+                                                    ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            18),
+                                                    borderSide: BorderSide(
+                                                      color: AppTheme
+                                                          .outlineVariant
+                                                          .withValues(
+                                                              alpha: 0.22),
+                                                    ),
+                                                  ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            18),
+                                                    borderSide:
+                                                        const BorderSide(
+                                                      color: AppTheme.secondary,
+                                                      width: 1.8,
+                                                    ),
+                                                  ),
+                                                  hintText: _assemblyDate ==
+                                                          null
+                                                      ? _orderTableColumnLabel(
+                                                          context,
+                                                          l10n,
+                                                          'selectDate',
+                                                          en: 'Select date',
+                                                          he: 'בחר תאריך',
+                                                          ar: 'اختر التاريخ',
+                                                        )
+                                                      : null,
+                                                  hintStyle:
+                                                      GoogleFonts.assistant(
+                                                    fontSize: 16,
+                                                    color: AppTheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 14,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  _assemblyDate == null
+                                                      ? ''
+                                                      : _assemblyDate!
+                                                          .toString()
+                                                          .split(' ')
+                                                          .first,
+                                                  style: GoogleFonts.assistant(
+                                                    fontSize: 16,
+                                                    color: AppTheme.onSurface,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            flex: 2,
+                                            child: TextField(
+                                              controller:
+                                                  _assemblyPriceController,
+                                              focusNode:
+                                                  _assemblyPriceFocusNode,
+                                              keyboardType: const TextInputType
+                                                  .numberWithOptions(
+                                                decimal: true,
+                                                signed: false,
+                                              ),
+                                              enableSuggestions: false,
+                                              autocorrect: false,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .allow(
+                                                  RegExp(r'[0-9.,]'),
+                                                ),
+                                              ],
+                                              onChanged: (_) {
+                                                _markDirty();
+                                                setState(() {});
+                                              },
+                                              style: GoogleFonts.assistant(
+                                                fontSize: 16,
+                                                color: AppTheme.onSurface,
+                                              ),
                                               decoration: InputDecoration(
                                                 labelText:
                                                     _orderTableColumnLabel(
                                                   context,
                                                   l10n,
-                                                  'assemblyDate',
-                                                  en: 'Assembly Date',
-                                                  he: 'תאריך הרכבה',
-                                                  ar: 'تاريخ التركيب',
+                                                  'assemblyInstallationPrice',
+                                                  en: 'Installation price',
+                                                  he: 'מחיר התקנה',
+                                                  ar: 'سعر التركيب',
+                                                ),
+                                                hintText:
+                                                    _orderTableColumnLabel(
+                                                  context,
+                                                  l10n,
+                                                  'assemblyInstallationPriceHint',
+                                                  en: '0',
+                                                  he: '0',
+                                                  ar: '0',
                                                 ),
                                                 labelStyle:
                                                     GoogleFonts.assistant(
@@ -1268,8 +1422,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                                   fontWeight: FontWeight.w700,
                                                   color: AppTheme.secondary,
                                                 ),
-                                                prefixIcon: const Icon(
-                                                  Icons.calendar_today_outlined,
+                                                prefixText: '₪ ',
+                                                prefixStyle:
+                                                    GoogleFonts.assistant(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
                                                   color: AppTheme.secondary,
                                                 ),
                                                 filled: true,
@@ -1306,268 +1463,141 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                                                     width: 1.8,
                                                   ),
                                                 ),
-                                                hintText: _assemblyDate == null
-                                                    ? _orderTableColumnLabel(
-                                                        context,
-                                                        l10n,
-                                                        'selectDate',
-                                                        en: 'Select date',
-                                                        he: 'בחר תאריך',
-                                                        ar: 'اختر التاريخ',
-                                                      )
-                                                    : null,
-                                                hintStyle:
-                                                    GoogleFonts.assistant(
-                                                  fontSize: 16,
-                                                  color:
-                                                      AppTheme.onSurfaceVariant,
-                                                ),
                                                 contentPadding:
                                                     const EdgeInsets.symmetric(
                                                   horizontal: 12,
                                                   vertical: 14,
                                                 ),
                                               ),
-                                              child: Text(
-                                                _assemblyDate == null
-                                                    ? ''
-                                                    : _assemblyDate!
-                                                        .toString()
-                                                        .split(' ')
-                                                        .first,
-                                                style: GoogleFonts.assistant(
-                                                  fontSize: 16,
-                                                  color: AppTheme.onSurface,
-                                                ),
-                                              ),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          flex: 2,
-                                          child: TextField(
-                                            controller:
-                                                _assemblyPriceController,
-                                            focusNode: _assemblyPriceFocusNode,
-                                            keyboardType: const TextInputType
-                                                .numberWithOptions(
-                                              decimal: true,
-                                              signed: false,
-                                            ),
-                                            enableSuggestions: false,
-                                            autocorrect: false,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter.allow(
-                                                RegExp(r'[0-9.,]'),
-                                              ),
-                                            ],
-                                            onChanged: (_) {
-                                              _markDirty();
-                                              setState(() {});
-                                            },
-                                            style: GoogleFonts.assistant(
-                                              fontSize: 16,
-                                              color: AppTheme.onSurface,
-                                            ),
-                                            decoration: InputDecoration(
-                                              labelText: _orderTableColumnLabel(
-                                                context,
-                                                l10n,
-                                                'assemblyInstallationPrice',
-                                                en: 'Installation price',
-                                                he: 'מחיר התקנה',
-                                                ar: 'سعر التركيب',
-                                              ),
-                                              hintText: _orderTableColumnLabel(
-                                                context,
-                                                l10n,
-                                                'assemblyInstallationPriceHint',
-                                                en: '0',
-                                                he: '0',
-                                                ar: '0',
-                                              ),
-                                              labelStyle: GoogleFonts.assistant(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w600,
-                                                color:
-                                                    AppTheme.onSurfaceVariant,
-                                              ),
-                                              floatingLabelStyle:
-                                                  GoogleFonts.assistant(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppTheme.secondary,
-                                              ),
-                                              prefixText: '₪ ',
-                                              prefixStyle:
-                                                  GoogleFonts.assistant(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppTheme.secondary,
-                                              ),
-                                              filled: true,
-                                              fillColor: AppTheme
-                                                  .surfaceContainerHighest
-                                                  .withValues(alpha: 0.55),
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(18),
-                                                borderSide: BorderSide(
-                                                  color: AppTheme.outlineVariant
-                                                      .withValues(alpha: 0.22),
-                                                ),
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(18),
-                                                borderSide: BorderSide(
-                                                  color: AppTheme.outlineVariant
-                                                      .withValues(alpha: 0.22),
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(18),
-                                                borderSide: const BorderSide(
-                                                  color: AppTheme.secondary,
-                                                  width: 1.8,
-                                                ),
-                                              ),
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 14,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                  ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              l10n?.tr('orderItems') ?? 'Order Items',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (!_isReadOnly && !_isLoading)
-                            FilledButton.icon(
-                              onPressed: () {
-                                _markDirty();
-                                setState(() => _items.add(_ItemRow()));
-                              },
-                              icon: const Icon(Icons.add_rounded, size: 20),
-                              label: Text(
-                                l10n?.tr('addItem') ?? 'Add item',
-                                style: GoogleFonts.assistant(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppTheme.secondary,
-                                foregroundColor: AppTheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
-                                shape: const StadiumBorder(),
-                                elevation: 0,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: AppTheme.outlineVariant.withValues(alpha: 0.2),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Scrollbar(
-                              controller: _itemsTableHorizontalScrollCtrl,
-                              thumbVisibility: true,
-                              interactive: true,
-                              child: SingleChildScrollView(
-                                controller: _itemsTableHorizontalScrollCtrl,
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsetsDirectional.only(
-                                  start: 16,
-                                  end: 16,
-                                  top: 6,
-                                  bottom: 12,
-                                ),
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minWidth: (constraints.maxWidth - 32)
-                                        .clamp(0.0, double.infinity),
-                                  ),
-                                  child: suppliersAsync.when(
-                                    data: (suppliers) => _buildItemsTable(
-                                      context,
-                                      l10n,
-                                      suppliers,
-                                      inventoryAsync.value ??
-                                          const <InventoryItem>[],
-                                      readOnly: _isReadOnly,
-                                    ),
-                                    loading: () => const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.all(24),
-                                        child: CircularProgressIndicator(),
+                                        ],
                                       ),
                                     ),
-                                    error: (_, __) => const Text('Error'),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                l10n?.tr('orderItems') ?? 'Order Items',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.onSurface,
+                                ),
+                              ),
+                            ),
+                            if (!_isReadOnly && !_isLoading)
+                              FilledButton.icon(
+                                onPressed: () {
+                                  _markDirty();
+                                  setState(() => _items.add(_ItemRow()));
+                                },
+                                icon: const Icon(Icons.add_rounded, size: 20),
+                                label: Text(
+                                  l10n?.tr('addItem') ?? 'Add item',
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.secondary,
+                                  foregroundColor: AppTheme.onPrimary,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  shape: const StadiumBorder(),
+                                  elevation: 0,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceContainerLowest,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.2),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return Scrollbar(
+                                controller: _itemsTableHorizontalScrollCtrl,
+                                thumbVisibility: true,
+                                interactive: true,
+                                child: SingleChildScrollView(
+                                  controller: _itemsTableHorizontalScrollCtrl,
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsetsDirectional.only(
+                                    start: 16,
+                                    end: 16,
+                                    top: 6,
+                                    bottom: 12,
+                                  ),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      minWidth: (constraints.maxWidth - 32)
+                                          .clamp(0.0, double.infinity),
+                                    ),
+                                    child: suppliersAsync.when(
+                                      data: (suppliers) => _buildItemsTable(
+                                        context,
+                                        l10n,
+                                        suppliers,
+                                        inventoryAsync.value ??
+                                            const <InventoryItem>[],
+                                        readOnly: _isReadOnly,
+                                      ),
+                                      loading: () => const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(24),
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      ),
+                                      error: (_, __) => const Text('Error'),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            _buildOrderBottomDrawer(context, l10n),
-          ],
+              _buildOrderBottomDrawer(context, l10n),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -1849,7 +1879,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           final dialogWidth = (size.width - 32).clamp(300.0, 760.0);
           final editorHeight = (size.height * 0.42).clamp(240.0, 520.0);
           return AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
             title: Text(
               _orderTableColumnLabel(
                 context,
@@ -1905,62 +1936,62 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
             ),
             actions: [
-            if (!_isReadOnly)
+              if (!_isReadOnly)
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    if (mounted) {
+                      setState(() {
+                        row.supplierNote = '';
+                        _hasUnsavedChanges = true;
+                      });
+                    }
+                  },
+                  child: Text(
+                    _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'orderLineSupplierNoteDelete',
+                      en: 'Delete note',
+                      he: 'מחק הערה',
+                      ar: 'حذف الملاحظة',
+                    ),
+                    style: GoogleFonts.assistant(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.error,
+                    ),
+                  ),
+                ),
               TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  if (mounted) {
-                    setState(() {
-                      row.supplierNote = '';
-                      _hasUnsavedChanges = true;
-                    });
-                  }
-                },
+                onPressed: () => Navigator.pop(ctx),
                 child: Text(
-                  _orderTableColumnLabel(
-                    context,
-                    l10n,
-                    'orderLineSupplierNoteDelete',
-                    en: 'Delete note',
-                    he: 'מחק הערה',
-                    ar: 'حذف الملاحظة',
-                  ),
-                  style: GoogleFonts.assistant(
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.error,
-                  ),
+                  _isReadOnly
+                      ? MaterialLocalizations.of(ctx).closeButtonLabel
+                      : (l10n?.tr('cancel') ?? 'Cancel'),
                 ),
               ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                _isReadOnly
-                    ? MaterialLocalizations.of(ctx).closeButtonLabel
-                    : (l10n?.tr('cancel') ?? 'Cancel'),
-              ),
-            ),
-            if (!_isReadOnly)
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  if (mounted) {
-                    setState(() {
-                      row.supplierNote = ctrl.text.trim();
-                      _hasUnsavedChanges = true;
-                    });
-                  }
-                },
-                child: Text(
-                  _orderTableColumnLabel(
-                    context,
-                    l10n,
-                    'orderLineSupplierNoteSave',
-                    en: 'Save',
-                    he: 'שמור',
-                    ar: 'حفظ',
+              if (!_isReadOnly)
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    if (mounted) {
+                      setState(() {
+                        row.supplierNote = ctrl.text.trim();
+                        _hasUnsavedChanges = true;
+                      });
+                    }
+                  },
+                  child: Text(
+                    _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'orderLineSupplierNoteSave',
+                      en: 'Save',
+                      he: 'שמור',
+                      ar: 'حفظ',
+                    ),
                   ),
                 ),
-              ),
             ],
           );
         },
@@ -2313,90 +2344,81 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     return null;
   }
 
-  /// Per-line fulfillment: in stock, awaiting supplier, received, or not supplier-sourced.
+  /// Stock-based status for a row: compares the inventory's available stock to the
+  /// quantity entered on the line. Returns one of:
+  ///   * "במלאי" (in stock) — when stock >= quantity
+  ///   * "חלקי"  (partial)  — when 0 < stock < quantity, with the shortage shown as detail
+  ///   * "חסר"   (missing)  — when stock <= 0, with the full quantity shown as detail
+  /// Rows manually marked as already-in-store also show "במלאי". Rows not linked
+  /// to an inventory item show "—".
   ({
     String label,
     String? detail,
     Color primaryColor,
     Color? detailColor,
+    Color? rowTint,
   }) _orderLineStatusForRow(
     BuildContext context,
     AppLocalizations? l10n,
     _ItemRow item,
+    List<InventoryItem> inventoryItems,
   ) {
-    if (item.existingInStore) {
+    final inStockLabel = _orderTableColumnLabel(
+      context,
+      l10n,
+      'orderStockStatusInStock',
+      en: 'In stock',
+      he: 'במלאי',
+      ar: 'متوفر',
+    );
+
+    final invId = (item.inventoryItemId ?? '').trim();
+    if (invId.isEmpty) {
       return (
-        label: _orderTableColumnLabel(
-          context,
-          l10n,
-          'orderWorkflowInStore',
-          en: 'In store',
-          he: 'במלאי',
-          ar: 'في المعرض',
-        ),
+        label: '—',
+        detail: null,
+        primaryColor: AppTheme.onSurfaceVariant,
+        detailColor: null,
+        rowTint: null,
+      );
+    }
+
+    final inv = inventoryItems.where((it) => it.id == invId).firstOrNull;
+    if (inv == null) {
+      return (
+        label: '—',
+        detail: null,
+        primaryColor: AppTheme.onSurfaceVariant,
+        detailColor: null,
+        rowTint: null,
+      );
+    }
+
+    final qty = int.tryParse(item.quantityCtrl.text.trim()) ?? 1;
+    final stock = inv.availableStock;
+
+    if (stock >= qty) {
+      return (
+        label: inStockLabel,
         detail: null,
         primaryColor: AppTheme.success,
         detailColor: null,
-      );
-    }
-    if (_lineHasSupplierOnRow(item)) {
-      if (item.supplierReceived) {
-        final received = _orderTableColumnLabel(
-          context,
-          l10n,
-          'orderWorkflowReceivedFromSupplier',
-          en: 'Received',
-          he: 'התקבל',
-          ar: 'مستلم',
-        );
-        if (item.readyForPickup) {
-          return (
-            label: _orderTableColumnLabel(
-              context,
-              l10n,
-              'orderWorkflowReadyForPickup',
-              en: 'Ready for pickup',
-              he: 'מוכן לאיסוף',
-              ar: 'جاهز للاستلام',
-            ),
-            detail: null,
-            primaryColor: AppTheme.secondary,
-            detailColor: null,
-          );
-        }
-        return (
-          label: received,
-          detail: null,
-          primaryColor: AppTheme.success,
-          detailColor: null,
-        );
-      }
-      return (
-        label: _orderTableColumnLabel(
-          context,
-          l10n,
-          'orderFormLineStatusAwaitingSupplier',
-          en: 'Awaiting supplier',
-          he: 'ממתין לסוכן',
-          ar: 'في انتظار المورد',
-        ),
-        detail: null,
-        primaryColor: AppTheme.warning,
-        detailColor: null,
+        rowTint: AppTheme.success.withValues(alpha: 0.10),
       );
     }
     return (
       label: _orderTableColumnLabel(
         context,
         l10n,
-        'orderFormLineStatusNoSupplier',
-        en: 'Not from supplier',
-        he: 'לא דרך סוכן',
-        ar: 'ليس عبر المورد',
+        'orderStockStatusMissing',
+        en: 'Out of stock',
+        he: 'חסר במלאי',
+        ar: 'غير متوفر',
       ),
-      detail: null,
-      primaryColor: AppTheme.onSurfaceVariant,
-      detailColor: null,
+      detail: '${qty - stock}',
+      primaryColor: AppTheme.error,
+      detailColor: AppTheme.error,
+      rowTint: AppTheme.error.withValues(alpha: 0.10),
     );
   }
 
@@ -2518,6 +2540,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             label: _orderTableHeader(
               context,
               l10n,
+              'orderFormStockStatus',
+              en: 'Stock',
+              he: 'מלאי גוף',
+              ar: 'المخزون',
+            ),
+          ),
+          DataColumn(
+            label: _orderTableHeader(
+              context,
+              l10n,
               'unitPrice',
               en: 'Unit price',
               he: 'מחיר ליחידה',
@@ -2588,16 +2620,6 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             label: _orderTableHeader(
               context,
               l10n,
-              'orderFormLineStatus',
-              en: 'Line status',
-              he: 'סטטוס שורה',
-              ar: 'حالة السطر',
-            ),
-          ),
-          DataColumn(
-            label: _orderTableHeader(
-              context,
-              l10n,
               'supplier',
               en: 'Supplier',
               he: 'סוכן',
@@ -2628,9 +2650,13 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         ],
         rows: List.generate(_items.length, (index) {
           final item = _items[index];
-          final lineStatus = _orderLineStatusForRow(context, l10n, item);
+          final lineStatus =
+              _orderLineStatusForRow(context, l10n, item, inventoryItems);
+          final rowTint = lineStatus.rowTint;
           return DataRow(
-            color: _orderItemRowHighlight(item),
+            color: rowTint != null
+                ? WidgetStateProperty.all(rowTint)
+                : _orderItemRowHighlight(item),
             cells: [
               DataCell(
                 Text(
@@ -2669,7 +2695,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       const SizedBox(width: 6),
                       IconButton(
                         tooltip: l10n?.tr('scanBarcode') ?? 'Scan barcode',
-                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                        icon:
+                            const Icon(Icons.qr_code_scanner_rounded, size: 18),
                         onPressed: readOnly
                             ? null
                             : () async {
@@ -2755,8 +2782,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                               : Icon(
                                   Icons.image_outlined,
                                   size: 18,
-                                  color: AppTheme.outline
-                                      .withValues(alpha: 0.55),
+                                  color:
+                                      AppTheme.outline.withValues(alpha: 0.55),
                                 ),
                         ),
                       ),
@@ -2792,6 +2819,56 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ),
                     style: cellStyle,
                     textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              DataCell(
+                SizedBox(
+                  width: 88,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: _orderLineStatusPillDecoration(
+                      lineStatus.primaryColor,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          lineStatus.label,
+                          style: cellStyle.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: lineStatus.primaryColor,
+                            height: 1.15,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (lineStatus.detail != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            lineStatus.detail!,
+                            style: cellStyle.copyWith(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  lineStatus.detailColor ?? AppTheme.secondary,
+                              height: 1.1,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -2898,10 +2975,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                         child: Text(
                           item.deliveryDate == null
                               ? ''
-                              : item.deliveryDate!
-                                  .toString()
-                                  .split(' ')
-                                  .first,
+                              : item.deliveryDate!.toString().split(' ').first,
                           style: cellStyle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -3015,54 +3089,6 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     },
                     decoration: orderTableCellDecoration(),
                     style: cellStyle,
-                  ),
-                ),
-              ),
-              DataCell(
-                SizedBox(
-                  width: 132,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    decoration: _orderLineStatusPillDecoration(
-                      lineStatus.primaryColor,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          lineStatus.label,
-                          style: cellStyle.copyWith(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: lineStatus.primaryColor,
-                            height: 1.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (lineStatus.detail != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            lineStatus.detail!,
-                            style: cellStyle.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color:
-                                  lineStatus.detailColor ?? AppTheme.secondary,
-                              height: 1.15,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -3249,8 +3275,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             'customer_id': _selectedCustomer!.id,
             'assembly_required': _assemblyRequired,
             'assembly_date': _assemblyDate?.toIso8601String().split('T').first,
-            'delivery_date':
-                _orderDeliveryDateAggregate()?.toIso8601String().split('T').first,
+            'delivery_date': _orderDeliveryDateAggregate()
+                ?.toIso8601String()
+                .split('T')
+                .first,
             'assembly_price': _assemblyRequired ? _assemblyInstallPrice : 0,
             'total_price': _totalPrice,
             'notes': _notesController.text.trim(),
@@ -3290,8 +3318,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       ref.invalidate(customersProvider);
 
       final itemsSig = _signatureForOrderItems(orderItems);
-      final shouldSendCustomerWa = isCreateFlow ||
-          (_lastNotifiedCustomerItemsSignature != itemsSig);
+      final shouldSendCustomerWa =
+          isCreateFlow || (_lastNotifiedCustomerItemsSignature != itemsSig);
       if (shouldSendCustomerWa) {
         await _sendOrderSummaryToCustomer(
           orderItems,
@@ -3401,7 +3429,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: Text(title, style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
+        title: Text(title,
+            style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
         content: Text(body, style: GoogleFonts.assistant()),
         actions: [
           TextButton(
@@ -3452,7 +3481,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title, style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
+        title: Text(title,
+            style: GoogleFonts.assistant(fontWeight: FontWeight.w800)),
         content: Text(body, style: GoogleFonts.assistant()),
         actions: [
           TextButton(
@@ -3482,9 +3512,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final phone = customer.phones.first;
     if (phone.trim().isEmpty) return;
 
-    final code = mounted
-        ? Localizations.localeOf(context).languageCode
-        : 'he';
+    final code = mounted ? Localizations.localeOf(context).languageCode : 'he';
 
     final message = _buildCustomerOrderMessage(
       languageCode: code,
@@ -3545,8 +3573,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final money = NumberFormat('#,##0.00', 'en_US');
     final dateFmt = DateFormat('dd/MM/yyyy');
 
-    final greetingName =
-        customer.customerName.trim().isNotEmpty ? customer.customerName : customer.cardName;
+    final greetingName = customer.customerName.trim().isNotEmpty
+        ? customer.customerName
+        : customer.cardName;
 
     final greeting = switch (lang) {
       'he' => 'שלום $greetingName (כרטיס: ${customer.cardName}),',
@@ -3583,10 +3612,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       'ar' => '📦 المنتجات:',
       _ => '📦 Items:',
     };
-    final qtyLabel = switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
-    final roomLabel = switch (lang) { 'he' => 'חדר', 'ar' => 'الغرفة', _ => 'Room' };
-    final extrasLabel = switch (lang) { 'he' => 'תוספת', 'ar' => 'إضافة', _ => 'Extras' };
-    final priceLabel = switch (lang) { 'he' => 'מחיר', 'ar' => 'السعر', _ => 'Price' };
+    final qtyLabel =
+        switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
+    final roomLabel =
+        switch (lang) { 'he' => 'חדר', 'ar' => 'الغرفة', _ => 'Room' };
+    final extrasLabel =
+        switch (lang) { 'he' => 'תוספת', 'ar' => 'إضافة', _ => 'Extras' };
+    final priceLabel =
+        switch (lang) { 'he' => 'מחיר', 'ar' => 'السعر', _ => 'Price' };
 
     final itemLines = <String>[];
     for (var i = 0; i < items.length; i++) {
@@ -3658,9 +3691,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       'ar' => 'المنتجات المطلوب طلبها:',
       _ => 'Items that need to be ordered:',
     };
-    final nameLabel = switch (lang) { 'he' => 'שם גוף', 'ar' => 'الاسم', _ => 'Name' };
-    final codeLabel = switch (lang) { 'he' => 'קוד', 'ar' => 'الكود', _ => 'Code' };
-    final qtyLabel = switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
+    final nameLabel =
+        switch (lang) { 'he' => 'שם גוף', 'ar' => 'الاسم', _ => 'Name' };
+    final codeLabel =
+        switch (lang) { 'he' => 'קוד', 'ar' => 'الكود', _ => 'Code' };
+    final qtyLabel =
+        switch (lang) { 'he' => 'כמות', 'ar' => 'الكمية', _ => 'Qty' };
     final lineNoteLabel = switch (lang) {
       'he' => 'הערה לפריט זה',
       'ar' => 'ملاحظة لهذا السطر',
@@ -3675,9 +3711,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final itemLines = <String>[];
     for (var i = 0; i < rows.length; i++) {
       final r = rows[i];
-      final name = r.nameCtrl.text.trim().isEmpty ? '—' : r.nameCtrl.text.trim();
+      final name =
+          r.nameCtrl.text.trim().isEmpty ? '—' : r.nameCtrl.text.trim();
       final code = r.itemNumberCtrl.text.trim();
-      final qty = r.quantityCtrl.text.trim().isEmpty ? '1' : r.quantityCtrl.text.trim();
+      final qty =
+          r.quantityCtrl.text.trim().isEmpty ? '1' : r.quantityCtrl.text.trim();
       final noteTrim = r.supplierNote.trim();
       final block = StringBuffer();
       block.writeln('${i + 1}) $nameLabel: $name');
@@ -3741,6 +3779,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       }
 
       // Send a WhatsApp message per supplier, with all that supplier's products.
+      bool isFirst = true;
       for (final entry in grouped.entries) {
         final supplier = suppliers.where((s) => s.id == entry.key).firstOrNull;
         if (supplier == null ||
@@ -3749,9 +3788,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           continue;
         }
 
-        final lang = mounted
-            ? Localizations.localeOf(context).languageCode
-            : 'he';
+        final lang =
+            mounted ? Localizations.localeOf(context).languageCode : 'he';
         final message = _buildSupplierOrderMessage(
           languageCode: lang,
           supplier: supplier,
@@ -3760,7 +3798,11 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         );
 
         final phone = supplier.phone!.replaceAll(RegExp(r'[^\d+]'), '');
+        if (!isFirst) {
+          await Future.delayed(const Duration(seconds: 10));
+        }
         await WhatsAppService.sendMessage(phone, message);
+        isFirst = false;
       }
 
       // Lock order: disable editing until admin changes status after confirmation.
@@ -3914,8 +3956,7 @@ void _bindSelectAllOnNumericFieldFocus(
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!node.hasFocus) return;
       final len = controller.text.length;
-      controller.selection =
-          TextSelection(baseOffset: 0, extentOffset: len);
+      controller.selection = TextSelection(baseOffset: 0, extentOffset: len);
     });
   });
 }
@@ -3939,6 +3980,7 @@ class _ItemRow {
     _bindSelectAllOnNumericFieldFocus(priceFocusNode, priceCtrl);
     _bindSelectAllOnNumericFieldFocus(extrasPriceFocusNode, extrasPriceCtrl);
   }
+
   /// Persisted `order_items.id` when loaded or after save (used to keep workflow flags).
   String? orderItemId;
   bool assemblyRequired = false;
@@ -3946,13 +3988,16 @@ class _ItemRow {
   String? inventoryItemId;
   DateTime? deliveryDate;
   bool existingInStore = false;
+
   /// From server / workflow: supplier line marked received.
   bool supplierReceived = false;
+
   /// From server / workflow: line marked ready for customer pickup.
   bool readyForPickup = false;
   bool inventoryDeducted = false;
   int warrantyYears = 0;
   String? imageUrl;
+
   /// Per-line note included only in WhatsApp to this row's supplier.
   String supplierNote = '';
 

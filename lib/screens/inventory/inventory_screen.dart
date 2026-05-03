@@ -136,247 +136,268 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         mainAxisSize: MainAxisSize.max,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                        Row(
-                          children: [
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: AppTheme.secondaryContainer
-                                    .withValues(alpha: 0.55),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Padding(
-                                padding: EdgeInsets.all(10),
-                                child: Icon(
-                                  Icons.inventory_2_rounded,
-                                  color: AppTheme.secondary,
-                                  size: 24,
+                          Row(
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.secondaryContainer
+                                      .withValues(alpha: 0.55),
+                                  shape: BoxShape.circle,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _trOrLocale(
-                                  context,
-                                  l10n,
-                                  'refillStockTitle',
-                                  en: 'Refill stock',
-                                  he: 'מילוי מלאי',
-                                  ar: 'تعبئة المخزون',
-                                ),
-                                style: GoogleFonts.assistant(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: l10n?.tr('close') ?? 'Close',
-                              onPressed: () => Navigator.pop(ctx, false),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Autocomplete<InventoryItem>(
-                          optionsBuilder: (value) {
-                            final q = value.text.trim().toLowerCase();
-                            if (q.isEmpty) return const Iterable<InventoryItem>.empty();
-                            return items.where((it) {
-                              final desc = it.description.toLowerCase();
-                              final brand = (it.brand ?? '').toLowerCase();
-                              final barcode = (it.barcode ?? '').toLowerCase();
-                              return desc.contains(q) ||
-                                  brand.contains(q) ||
-                                  barcode.contains(q);
-                            }).take(20);
-                          },
-                          displayStringForOption: (it) => it.description,
-                          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-                            controller.text = selectedCtrl.text;
-                            return TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              style: GoogleFonts.assistant(),
-                              decoration: InputDecoration(
-                                labelText: _trOrLocale(
-                                  context,
-                                  l10n,
-                                  'refillStockSelectItem',
-                                  en: 'Select item',
-                                  he: 'בחר פריט',
-                                  ar: 'اختر عنصرًا',
-                                ),
-                                prefixIcon: const Icon(Icons.search_rounded),
-                                filled: true,
-                                fillColor: AppTheme.surfaceContainerLow,
-                              ),
-                              onChanged: (_) {
-                                setLocal(() {
-                                  selected = null;
-                                  selectedCtrl.text = controller.text;
-                                });
-                              },
-                            );
-                          },
-                          onSelected: (it) {
-                            setLocal(() {
-                              selected = it;
-                              selectedCtrl.text = it.description;
-                            });
-                          },
-                          optionsViewBuilder: (context, onSelected, opts) {
-                            return Align(
-                              alignment: AlignmentDirectional.topStart,
-                              child: Material(
-                                color: AppTheme.surfaceContainerLowest,
-                                elevation: 8,
-                                shadowColor: Colors.black.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(14),
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxHeight: 360,
-                                    maxWidth: (mq.width - 40).clamp(340.0, 680.0),
-                                  ),
-                                  child: ListView.separated(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    shrinkWrap: true,
-                                    itemCount: opts.length,
-                                    separatorBuilder: (_, __) => Divider(
-                                      height: 1,
-                                      color: AppTheme.outlineVariant.withValues(alpha: 0.4),
-                                    ),
-                                    itemBuilder: (context, i) {
-                                      final it = opts.elementAt(i);
-                                      final hasPhoto = it.imageUrl != null &&
-                                          it.imageUrl!.trim().isNotEmpty;
-                                      return ListTile(
-                                        dense: true,
-                                        leading: ClipRRect(
-                                          borderRadius: BorderRadius.circular(10),
-                                          child: Container(
-                                            width: 46,
-                                            height: 46,
-                                            color: AppTheme.surfaceContainerHighest
-                                                .withValues(alpha: 0.45),
-                                            child: hasPhoto
-                                                ? CachedNetworkImage(
-                                                    imageUrl: it.imageUrl!,
-                                                    fit: BoxFit.cover,
-                                                  )
-                                                : Icon(
-                                                    Icons.image_outlined,
-                                                    color: AppTheme.outlineVariant,
-                                                    size: 22,
-                                                  ),
-                                          ),
-                                        ),
-                                        title: Text(
-                                          it.description,
-                                          style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        subtitle: Text(
-                                          '${_trOrLocale(context, l10n, 'availableStock', en: 'In stock', he: 'מלאי זמין', ar: 'متوفر')}: ${it.availableStock}',
-                                          style: GoogleFonts.assistant(fontSize: 12, color: AppTheme.onSurfaceVariant),
-                                        ),
-                                        onTap: () => onSelected(it),
-                                      );
-                                    },
+                                child: const Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Icon(
+                                    Icons.inventory_2_rounded,
+                                    color: AppTheme.secondary,
+                                    size: 24,
                                   ),
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: amountCtrl,
-                                keyboardType: TextInputType.number,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _trOrLocale(
+                                    context,
+                                    l10n,
+                                    'refillStockTitle',
+                                    en: 'Refill stock',
+                                    he: 'מילוי מלאי',
+                                    ar: 'تعبئة المخزون',
+                                  ),
+                                  style: GoogleFonts.assistant(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: l10n?.tr('close') ?? 'Close',
+                                onPressed: () => Navigator.pop(ctx, false),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Autocomplete<InventoryItem>(
+                            optionsBuilder: (value) {
+                              final q = value.text.trim().toLowerCase();
+                              if (q.isEmpty)
+                                return const Iterable<InventoryItem>.empty();
+                              return items.where((it) {
+                                final desc = it.description.toLowerCase();
+                                final brand = (it.brand ?? '').toLowerCase();
+                                final barcode =
+                                    (it.barcode ?? '').toLowerCase();
+                                return desc.contains(q) ||
+                                    brand.contains(q) ||
+                                    barcode.contains(q);
+                              }).take(20);
+                            },
+                            displayStringForOption: (it) => it.description,
+                            fieldViewBuilder:
+                                (context, controller, focusNode, onSubmit) {
+                              controller.text = selectedCtrl.text;
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
                                 style: GoogleFonts.assistant(),
                                 decoration: InputDecoration(
                                   labelText: _trOrLocale(
                                     context,
                                     l10n,
-                                    'refillStockAmount',
-                                    en: 'Add units',
-                                    he: 'הוסף יחידות',
-                                    ar: 'أضف وحدات',
+                                    'refillStockSelectItem',
+                                    en: 'Select item',
+                                    he: 'בחר פריט',
+                                    ar: 'اختر عنصرًا',
                                   ),
+                                  prefixIcon: const Icon(Icons.search_rounded),
                                   filled: true,
                                   fillColor: AppTheme.surfaceContainerLow,
                                 ),
-                                onChanged: (_) => setLocal(() {}),
+                                onChanged: (_) {
+                                  setLocal(() {
+                                    selected = null;
+                                    selectedCtrl.text = controller.text;
+                                  });
+                                },
+                              );
+                            },
+                            onSelected: (it) {
+                              setLocal(() {
+                                selected = it;
+                                selectedCtrl.text = it.description;
+                              });
+                            },
+                            optionsViewBuilder: (context, onSelected, opts) {
+                              return Align(
+                                alignment: AlignmentDirectional.topStart,
+                                child: Material(
+                                  color: AppTheme.surfaceContainerLowest,
+                                  elevation: 8,
+                                  shadowColor:
+                                      Colors.black.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: 360,
+                                      maxWidth:
+                                          (mq.width - 40).clamp(340.0, 680.0),
+                                    ),
+                                    child: ListView.separated(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
+                                      shrinkWrap: true,
+                                      itemCount: opts.length,
+                                      separatorBuilder: (_, __) => Divider(
+                                        height: 1,
+                                        color: AppTheme.outlineVariant
+                                            .withValues(alpha: 0.4),
+                                      ),
+                                      itemBuilder: (context, i) {
+                                        final it = opts.elementAt(i);
+                                        final hasPhoto = it.imageUrl != null &&
+                                            it.imageUrl!.trim().isNotEmpty;
+                                        return ListTile(
+                                          dense: true,
+                                          leading: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            child: Container(
+                                              width: 46,
+                                              height: 46,
+                                              color: AppTheme
+                                                  .surfaceContainerHighest
+                                                  .withValues(alpha: 0.45),
+                                              child: hasPhoto
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: it.imageUrl!,
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : Icon(
+                                                      Icons.image_outlined,
+                                                      color: AppTheme
+                                                          .outlineVariant,
+                                                      size: 22,
+                                                    ),
+                                            ),
+                                          ),
+                                          title: Text(
+                                            it.description,
+                                            style: GoogleFonts.assistant(
+                                                fontWeight: FontWeight.w700),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          subtitle: Text(
+                                            '${_trOrLocale(context, l10n, 'availableStock', en: 'In stock', he: 'מלאי זמין', ar: 'متوفر')}: ${it.availableStock}',
+                                            style: GoogleFonts.assistant(
+                                                fontSize: 12,
+                                                color:
+                                                    AppTheme.onSurfaceVariant),
+                                          ),
+                                          onTap: () => onSelected(it),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: amountCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.assistant(),
+                                  decoration: InputDecoration(
+                                    labelText: _trOrLocale(
+                                      context,
+                                      l10n,
+                                      'refillStockAmount',
+                                      en: 'Add units',
+                                      he: 'הוסף יחידות',
+                                      ar: 'أضف وحدات',
+                                    ),
+                                    filled: true,
+                                    fillColor: AppTheme.surfaceContainerLow,
+                                  ),
+                                  onChanged: (_) => setLocal(() {}),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            if (selected != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.secondaryContainer.withValues(alpha: 0.35),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: AppTheme.secondary.withValues(alpha: 0.25),
+                              const SizedBox(width: 10),
+                              if (selected != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.secondaryContainer
+                                        .withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppTheme.secondary
+                                          .withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '+${int.tryParse(amountCtrl.text.trim()) ?? 0}',
+                                    style: GoogleFonts.assistant(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.secondary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: Text(_trOrLocale(
+                                  context,
+                                  l10n,
+                                  'cancel',
+                                  en: 'Cancel',
+                                  he: 'ביטול',
+                                  ar: 'إلغاء',
+                                )),
+                              ),
+                              const Spacer(),
+                              FilledButton(
+                                onPressed: enable
+                                    ? () => Navigator.pop(ctx, true)
+                                    : null,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.secondary,
+                                  foregroundColor: AppTheme.onSecondary,
+                                  disabledBackgroundColor: AppTheme.secondary
+                                      .withValues(alpha: 0.35),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
                                 child: Text(
-                                  '+${int.tryParse(amountCtrl.text.trim()) ?? 0}',
-                                  style: GoogleFonts.assistant(
-                                    fontWeight: FontWeight.w800,
-                                    color: AppTheme.secondary,
+                                  _trOrLocale(
+                                    context,
+                                    l10n,
+                                    'refillStockConfirm',
+                                    en: 'Add to stock',
+                                    he: 'הוסף למלאי',
+                                    ar: 'إضافة للمخزون',
                                   ),
+                                  style: GoogleFonts.assistant(
+                                      fontWeight: FontWeight.w800),
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: Text(_trOrLocale(
-                                context,
-                                l10n,
-                                'cancel',
-                                en: 'Cancel',
-                                he: 'ביטול',
-                                ar: 'إلغاء',
-                              )),
-                            ),
-                            const Spacer(),
-                            FilledButton(
-                              onPressed: enable ? () => Navigator.pop(ctx, true) : null,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppTheme.secondary,
-                                foregroundColor: AppTheme.onSecondary,
-                                disabledBackgroundColor:
-                                    AppTheme.secondary.withValues(alpha: 0.35),
-                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                _trOrLocale(
-                                  context,
-                                  l10n,
-                                  'refillStockConfirm',
-                                  en: 'Add to stock',
-                                  he: 'הוסף למלאי',
-                                  ar: 'إضافة للمخزون',
-                                ),
-                                style: GoogleFonts.assistant(fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                            ],
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -390,9 +411,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       final add = int.tryParse(amountCtrl.text.trim()) ?? 0;
       if (add <= 0) return;
       await ref.read(inventoryServiceProvider).update(
-            selected!.id,
-            {'available_stock': selected!.availableStock + add},
-          );
+        selected!.id,
+        {'available_stock': selected!.availableStock + add},
+      );
       ref.invalidate(inventoryItemsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(this.context).showSnackBar(
@@ -458,7 +479,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     List<InventoryItem> itemsForSupplier() {
       final sid = selectedSupplier?.id;
       if (sid == null) return <InventoryItem>[];
-      final list = items.where((i) => i.supplierId == sid).toList(growable: true);
+      final list =
+          items.where((i) => i.supplierId == sid).toList(growable: true);
       list.sort((a, b) =>
           a.description.toLowerCase().compareTo(b.description.toLowerCase()));
       return list;
@@ -493,15 +515,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                     const lowStockThreshold = 2;
                     var itemList = itemsForSupplier();
                     if (filter == 'out') {
-                      itemList = itemList.where((i) => i.availableStock == 0).toList();
+                      itemList =
+                          itemList.where((i) => i.availableStock == 0).toList();
                     } else if (filter == 'low') {
                       itemList = itemList
                           .where((i) => i.availableStock <= lowStockThreshold)
                           .toList();
                     }
                     itemList.sort((a, b) {
-                      final aLow = a.availableStock <= lowStockThreshold ? 0 : 1;
-                      final bLow = b.availableStock <= lowStockThreshold ? 0 : 1;
+                      final aLow =
+                          a.availableStock <= lowStockThreshold ? 0 : 1;
+                      final bLow =
+                          b.availableStock <= lowStockThreshold ? 0 : 1;
                       final c = aLow.compareTo(bLow);
                       if (c != 0) return c;
                       return a.description
@@ -572,8 +597,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                               enableFilter: true,
                               enableSearch: true,
                               menuHeight: 320,
-                              leadingIcon:
-                                  const Icon(Icons.storefront_rounded),
+                              leadingIcon: const Icon(Icons.storefront_rounded),
                               initialSelection: selectedSupplier,
                               onSelected: (s) =>
                                   setLocal(() => selectedSupplier = s),
@@ -630,7 +654,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                onSelected: (_) => setLocal(() => filter = 'all'),
+                                onSelected: (_) =>
+                                    setLocal(() => filter = 'all'),
                               ),
                               ChoiceChip(
                                 selected: filter == 'low',
@@ -647,7 +672,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                onSelected: (_) => setLocal(() => filter = 'low'),
+                                onSelected: (_) =>
+                                    setLocal(() => filter = 'low'),
                               ),
                               ChoiceChip(
                                 selected: filter == 'out',
@@ -664,11 +690,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                onSelected: (_) => setLocal(() => filter = 'out'),
+                                onSelected: (_) =>
+                                    setLocal(() => filter = 'out'),
                               ),
                             ],
                           ),
-                        if (selectedSupplier != null) const SizedBox(height: 12),
+                        if (selectedSupplier != null)
+                          const SizedBox(height: 12),
                         Expanded(
                           child: selectedSupplier == null
                               ? Center(
@@ -694,12 +722,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                           dialogContext,
                                           l10n,
                                           'orderStockNoItemsForSupplier',
-                                          en:
-                                              'No inventory items are linked to this supplier.',
-                                          he:
-                                              'אין פריטי מלאי שמשויכים לסוכן הזה.',
-                                          ar:
-                                              'لا توجد عناصر مخزون مرتبطة بهذا المورد.',
+                                          en: 'No inventory items are linked to this supplier.',
+                                          he: 'אין פריטי מלאי שמשויכים לסוכן הזה.',
+                                          ar: 'لا توجد عناصر مخزون مرتبطة بهذا المورد.',
                                         ),
                                         style: GoogleFonts.assistant(
                                           color: AppTheme.onSurfaceVariant,
@@ -727,9 +752,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                             final it = itemList[i];
                                             final hasPhoto = it.imageUrl !=
                                                     null &&
-                                                it.imageUrl!
-                                                    .trim()
-                                                    .isNotEmpty;
+                                                it.imageUrl!.trim().isNotEmpty;
                                             final ctrl = qtyCtrl(it.id);
                                             final stock = it.availableStock;
                                             final stockColor = stock == 0
@@ -743,8 +766,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                                     .withValues(alpha: 0.08)
                                                 : (stock <= lowStockThreshold
                                                     ? AppTheme.warning
-                                                        .withValues(
-                                                            alpha: 0.10)
+                                                        .withValues(alpha: 0.10)
                                                     : AppTheme
                                                         .surfaceContainerHighest
                                                         .withValues(
@@ -752,8 +774,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
                                             return DecoratedBox(
                                               decoration: BoxDecoration(
-                                                color:
-                                                    AppTheme.surfaceContainerLow,
+                                                color: AppTheme
+                                                    .surfaceContainerLow,
                                                 borderRadius:
                                                     BorderRadius.circular(16),
                                                 border: Border.all(
@@ -832,13 +854,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                                                 ),
                                                                 decoration:
                                                                     BoxDecoration(
-                                                                  color: stockBg,
+                                                                  color:
+                                                                      stockBg,
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
                                                                               999),
-                                                                  border:
-                                                                      Border.all(
+                                                                  border: Border
+                                                                      .all(
                                                                     color: stockColor
                                                                         .withValues(
                                                                             alpha:
@@ -893,14 +916,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                                         keyboardType:
                                                             TextInputType
                                                                 .number,
-                                                        style:
-                                                            GoogleFonts.assistant(
+                                                        style: GoogleFonts
+                                                            .assistant(
                                                           fontWeight:
                                                               FontWeight.w800,
                                                         ),
                                                         decoration:
                                                             InputDecoration(
-                                                          labelText: _trOrLocale(
+                                                          labelText:
+                                                              _trOrLocale(
                                                             dialogContext,
                                                             l10n,
                                                             'quantity',
@@ -940,7 +964,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                             ),
                             const Spacer(),
                             FilledButton(
-                              onPressed: canSend ? () => Navigator.pop(ctx, true) : null,
+                              onPressed: canSend
+                                  ? () => Navigator.pop(ctx, true)
+                                  : null,
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppTheme.secondary,
                                 foregroundColor: AppTheme.onSecondary,
@@ -1059,7 +1085,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       he: 'הזמנת מלאי',
                       ar: 'طلب مخزون',
                     ),
-                    child: const Icon(Icons.shopping_cart_checkout_rounded, size: 22),
+                    child: const Icon(Icons.shopping_cart_checkout_rounded,
+                        size: 22),
                   ),
                 ),
               ),
@@ -1104,19 +1131,39 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               ),
             ),
             const SizedBox(height: 10),
+            AnimatedSlide(
+              offset: _fabExpanded ? Offset.zero : const Offset(0, 0.25),
+              duration: const Duration(milliseconds: 190),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: _fabExpanded ? 1 : 0,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: IgnorePointer(
+                  ignoring: !_fabExpanded,
+                  child: FloatingActionButton(
+                    mini: true,
+                    heroTag: 'inv_new_item_fab',
+                    backgroundColor: AppTheme.surfaceContainerLowest,
+                    foregroundColor: AppTheme.secondary,
+                    elevation: 3,
+                    onPressed: () {
+                      _closeFab();
+                      _openItemDialog(context, ref, l10n);
+                    },
+                    tooltip: l10n?.tr('newItem') ?? 'New Item',
+                    child: const Icon(Icons.add_box_rounded, size: 22),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             FloatingActionButton(
               heroTag: 'inv_add_fab',
               backgroundColor: AppTheme.secondary,
               foregroundColor: AppTheme.onPrimary,
               elevation: 2,
-              onPressed: () {
-                if (_fabExpanded) {
-                  _closeFab();
-                  _openItemDialog(context, ref, l10n);
-                  return;
-                }
-                _toggleFab();
-              },
+              onPressed: _toggleFab,
               tooltip: l10n?.tr('newItem') ?? 'New Item',
               child: AnimatedRotation(
                 turns: _fabExpanded ? 0.125 : 0,
@@ -1131,7 +1178,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       body: itemsAsync.when(
         data: (items) {
           final suppliersById = <String, String>{
-            for (final s in (suppliersAsync.value ?? const [])) s.id: s.companyName,
+            for (final s in (suppliersAsync.value ?? const []))
+              s.id: s.companyName,
           };
 
           final q = _searchCtrl.text.trim().toLowerCase();
@@ -1180,8 +1228,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                               color: AppTheme.onSurface,
                             ),
                             decoration: InputDecoration(
-                              floatingLabelBehavior:
-                                  FloatingLabelBehavior.auto,
+                              floatingLabelBehavior: FloatingLabelBehavior.auto,
                               floatingLabelAlignment:
                                   FloatingLabelAlignment.start,
                               labelText: _searchHint(),
@@ -1511,8 +1558,8 @@ class _InventoryItemCard extends StatelessWidget {
                               .withValues(alpha: 0.92),
                           borderRadius: BorderRadius.circular(999),
                           border: Border.all(
-                            color: AppTheme.outlineVariant
-                                .withValues(alpha: 0.22),
+                            color:
+                                AppTheme.outlineVariant.withValues(alpha: 0.22),
                           ),
                         ),
                         child: Text(
@@ -2156,9 +2203,11 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
         final updates = {
           'description': desc,
           'supplier_id': _supplierId,
-          'brand': _brandCtrl.text.trim().isEmpty ? null : _brandCtrl.text.trim(),
-          'barcode':
-              _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+          'brand':
+              _brandCtrl.text.trim().isEmpty ? null : _brandCtrl.text.trim(),
+          'barcode': _barcodeCtrl.text.trim().isEmpty
+              ? null
+              : _barcodeCtrl.text.trim(),
           'consumer_price': price,
           'available_stock': stock,
           'is_weighted': _isWeighted,
@@ -2422,8 +2471,9 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                           initialSelection: _supplierId,
                           enabled: !_saving,
                           menuStyle: appDropdownMenuStyle(),
-                          inputDecorationTheme: appDropdownInputDecorationTheme()
-                              .copyWith(fillColor: Colors.white),
+                          inputDecorationTheme:
+                              appDropdownInputDecorationTheme()
+                                  .copyWith(fillColor: Colors.white),
                           decorationBuilder: (context, controller) {
                             return animatedDropdownDecorationBuilder(
                               label: Text(
@@ -2490,6 +2540,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                     ar: 'باركود',
                   ),
                   icon: Icons.qr_code_2_rounded,
+                  keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 10),
                 Align(
@@ -2531,12 +2582,13 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 ),
                 const SizedBox(height: 14),
                 DropdownMenu<int>(
-                  key: ValueKey('inv_warranty_${_warrantyYears}_${Localizations.localeOf(context).languageCode}'),
+                  key: ValueKey(
+                      'inv_warranty_${_warrantyYears}_${Localizations.localeOf(context).languageCode}'),
                   initialSelection: _warrantyYears,
                   enabled: !_saving,
                   menuStyle: appDropdownMenuStyle(),
-                  inputDecorationTheme:
-                      appDropdownInputDecorationTheme().copyWith(fillColor: Colors.white),
+                  inputDecorationTheme: appDropdownInputDecorationTheme()
+                      .copyWith(fillColor: Colors.white),
                   decorationBuilder: (context, controller) {
                     return animatedDropdownDecorationBuilder(
                       label: Text(
@@ -2640,9 +2692,11 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 ),
                 const SizedBox(height: 14),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceContainerHighest.withValues(alpha: 0.32),
+                    color: AppTheme.surfaceContainerHighest
+                        .withValues(alpha: 0.32),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: AppTheme.outlineVariant.withValues(alpha: 0.18),
@@ -2734,7 +2788,9 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                     Expanded(
                       child: SwitchListTile.adaptive(
                         value: _isWeighted,
-                        onChanged: _saving ? null : (v) => setState(() => _isWeighted = v),
+                        onChanged: _saving
+                            ? null
+                            : (v) => setState(() => _isWeighted = v),
                         title: Text(
                           _trOrLocale(
                             context,
@@ -2756,7 +2812,9 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                     Expanded(
                       child: SwitchListTile.adaptive(
                         value: _isVatExempt,
-                        onChanged: _saving ? null : (v) => setState(() => _isVatExempt = v),
+                        onChanged: _saving
+                            ? null
+                            : (v) => setState(() => _isVatExempt = v),
                         title: Text(
                           _trOrLocale(
                             context,
@@ -2809,7 +2867,8 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                       ),
                       child: Text(
                         l10n?.tr('cancel') ?? 'Cancel',
-                        style: GoogleFonts.assistant(fontWeight: FontWeight.w600),
+                        style:
+                            GoogleFonts.assistant(fontWeight: FontWeight.w600),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2829,7 +2888,8 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                       ),
                       child: Text(
                         l10n?.tr('save') ?? 'Save',
-                        style: GoogleFonts.assistant(fontWeight: FontWeight.w700),
+                        style:
+                            GoogleFonts.assistant(fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -2914,4 +2974,3 @@ class SupplierNameCache extends InheritedWidget {
   bool updateShouldNotify(SupplierNameCache oldWidget) =>
       suppliersById != oldWidget.suppliersById;
 }
-
