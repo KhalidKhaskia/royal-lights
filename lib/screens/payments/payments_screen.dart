@@ -24,6 +24,8 @@ String _localizedPaymentType(AppLocalizations? l10n, PaymentType t) {
       return l10n?.tr('credit') ?? 'Credit';
     case PaymentType.check:
       return l10n?.tr('check') ?? 'Check';
+    case PaymentType.transfer:
+      return l10n?.tr('transfer') ?? 'Transfer';
   }
 }
 
@@ -44,7 +46,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
-  /// `all` | `cash` | `credit` | `check`
+  /// `all` | `cash` | `credit` | `check` | `transfer`
   String _typeFilterKey = 'all';
 
   @override
@@ -111,6 +113,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
         'cash' => PaymentType.cash,
         'credit' => PaymentType.credit,
         'check' => PaymentType.check,
+        'transfer' => PaymentType.transfer,
         _ => null,
       };
       if (t != null) {
@@ -614,6 +617,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                     value: 'check',
                                     label: l10n?.tr('check') ?? 'Check',
                                   ),
+                                  DropdownMenuEntry(
+                                    value: 'transfer',
+                                    label: l10n?.tr('transfer') ?? 'Transfer',
+                                  ),
                                 ],
                               ),
                             );
@@ -754,6 +761,14 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                               typeColor = AppTheme.warning;
                               typeLeading = Icon(
                                 Icons.description,
+                                size: 16,
+                                color: typeColor,
+                              );
+                              break;
+                            case PaymentType.transfer:
+                              typeColor = const Color(0xFF1976D2);
+                              typeLeading = Icon(
+                                Icons.swap_horiz,
                                 size: 16,
                                 color: typeColor,
                               );

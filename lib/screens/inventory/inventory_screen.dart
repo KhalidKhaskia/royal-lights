@@ -2060,25 +2060,6 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
       );
       return;
     }
-    if (_supplierId == null || _supplierId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _trOrLocale(
-              context,
-              l10n,
-              'pleaseSelectSupplier',
-              en: 'Please select a supplier',
-              he: 'נא לבחור סוכן',
-              ar: 'يرجى اختيار مورد',
-            ),
-          ),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-      return;
-    }
-
     int parseStock(String raw) {
       final v = int.tryParse(raw.trim());
       return v == null ? 0 : v.clamp(0, 1 << 30);
@@ -2350,6 +2331,8 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
     final hasExistingPhoto =
         widget.existingItem?.imageUrl != null && !_deleteExistingPhoto;
     final suppliersAsync = widget.ref.watch(suppliersProvider);
+    final brandMap =
+        widget.ref.watch(inventoryBrandSupplierMapProvider).asData?.value;
 
     return Dialog(
       backgroundColor: AppTheme.surfaceContainerLowest,
@@ -2455,7 +2438,17 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 const SizedBox(height: 14),
                 suppliersAsync.when(
                   data: (suppliers) {
-                    final entries = suppliers
+                    final brandText = _brandCtrl.text.trim();
+                    final allowedSupplierIds =
+                        brandText.isNotEmpty && brandMap != null
+                            ? brandMap.suppliersByBrand[brandText]
+                            : null;
+                    final filteredSuppliers = allowedSupplierIds == null
+                        ? suppliers
+                        : suppliers
+                            .where((s) => allowedSupplierIds.contains(s.id))
+                            .toList();
+                    final entries = filteredSuppliers
                         .map(
                           (s) => DropdownMenuEntry<String>(
                             value: s.id,
@@ -2500,7 +2493,21 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                               iconSize: 18,
                             )(context, controller);
                           },
-                          onSelected: (v) => setState(() => _supplierId = v),
+                          onSelected: (v) {
+                            setState(() {
+                              _supplierId = v;
+                              if (v != null && brandMap != null) {
+                                final pairedBrands =
+                                    brandMap.brandsBySupplier[v];
+                                final currentBrand = _brandCtrl.text.trim();
+                                if (pairedBrands != null &&
+                                    pairedBrands.length == 1 &&
+                                    currentBrand.isEmpty) {
+                                  _brandCtrl.text = pairedBrands.first;
+                                }
+                              }
+                            });
+                          },
                           dropdownMenuEntries: entries,
                         );
                       },
@@ -2516,18 +2523,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                _buildField(
-                  controller: _brandCtrl,
-                  label: _trOrLocale(
-                    context,
-                    l10n,
-                    'brand',
-                    en: 'Brand / company',
-                    he: 'חברה / מותג',
-                    ar: 'شركة / ماركة',
-                  ),
-                  icon: Icons.storefront_outlined,
-                ),
+                _buildBrandField(brandMap, suppliersAsync.asData?.value),
                 const SizedBox(height: 14),
                 _buildField(
                   controller: _barcodeCtrl,
@@ -2952,6 +2948,154 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
+    );
+  }
+
+  Widget _buildBrandField(
+    InventoryBrandSupplierMap? brandMap,
+    List<Supplier>? suppliers,
+  ) {
+    final l10n = widget.l10n;
+    final label = _trOrLocale(
+      context,
+      l10n,
+      'brand',
+      en: 'Brand / company',
+      he: 'חברה / מותג',
+      ar: 'شركة / ماركة',
+    );
+
+    List<String> brandOptions;
+    if (brandMap == null) {
+      brandOptions = const [];
+    } else if (_supplierId != null && _supplierId!.isNotEmpty) {
+      brandOptions = (brandMap.brandsBySupplier[_supplierId!] ?? const {})
+          .toList()
+        ..sort();
+    } else {
+      brandOptions = brandMap.allBrands;
+    }
+
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: _brandCtrl.text),
+      optionsBuilder: (textEditingValue) {
+        final q = textEditingValue.text.trim().toLowerCase();
+        if (q.isEmpty) return brandOptions;
+        return brandOptions
+            .where((b) => b.toLowerCase().contains(q));
+      },
+      onSelected: (value) {
+        setState(() {
+          _brandCtrl.text = value;
+          if ((_supplierId == null || _supplierId!.isEmpty) &&
+              brandMap != null &&
+              suppliers != null) {
+            final paired = brandMap.suppliersByBrand[value];
+            if (paired != null && paired.length == 1) {
+              final sid = paired.first;
+              if (suppliers.any((s) => s.id == sid)) {
+                _supplierId = sid;
+              }
+            }
+          }
+        });
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        if (controller.text != _brandCtrl.text) {
+          controller.text = _brandCtrl.text;
+        }
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppTheme.outlineVariant.withValues(alpha: 0.25),
+            ),
+          ),
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            enabled: !_saving,
+            style: GoogleFonts.assistant(
+              fontSize: 14,
+              color: AppTheme.onSurface,
+            ),
+            onChanged: (v) {
+              _brandCtrl.text = v;
+              setState(() {});
+            },
+            onSubmitted: (_) => onFieldSubmitted(),
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: TextStyle(
+                color: AppTheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+              prefixIcon: Icon(
+                Icons.storefront_outlined,
+                size: 20,
+                color: AppTheme.outline,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.25),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(
+                  color: AppTheme.outlineVariant.withValues(alpha: 0.25),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide:
+                    const BorderSide(color: AppTheme.secondary, width: 2),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: AlignmentDirectional.topStart,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                children: options
+                    .map(
+                      (opt) => InkWell(
+                        onTap: () => onSelected(opt),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          child: Text(
+                            opt,
+                            style: GoogleFonts.assistant(
+                              fontSize: 14,
+                              color: AppTheme.onSurface,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

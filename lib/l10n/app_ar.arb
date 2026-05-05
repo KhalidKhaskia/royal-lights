@@ -107,6 +107,7 @@
   "cash": "نقدي",
   "credit": "بطاقة ائتمان",
   "check": "شيك",
+  "transfer": "تحويل",
   "companyName": "اسم الشركة",
   "contactName": "جهة الاتصال",
   "openOrders": "طلبات مفتوحة",

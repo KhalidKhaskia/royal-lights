@@ -311,12 +311,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           case PaymentType.cash: return 'מזומן';
           case PaymentType.credit: return 'אשראי';
           case PaymentType.check: return 'צ\'ק';
+          case PaymentType.transfer: return 'העברה';
         }
       case 'ar':
         switch (t) {
           case PaymentType.cash: return 'نقدًا';
           case PaymentType.credit: return 'بطاقة';
           case PaymentType.check: return 'شيك';
+          case PaymentType.transfer: return 'تحويل';
         }
       default:
         return t.dbValue;
@@ -2036,6 +2038,15 @@ class _PaymentRow extends StatelessWidget {
           he: 'צ\'ק',
           ar: 'شيك',
         );
+      case PaymentType.transfer:
+        return _trOrLocale(
+          context,
+          l10n,
+          'transfer',
+          en: 'Transfer',
+          he: 'העברה',
+          ar: 'تحويل',
+        );
     }
   }
 
@@ -2047,6 +2058,8 @@ class _PaymentRow extends StatelessWidget {
         return Icons.payments_rounded;
       case PaymentType.check:
         return Icons.receipt_long_rounded;
+      case PaymentType.transfer:
+        return Icons.swap_horiz_rounded;
     }
   }
 

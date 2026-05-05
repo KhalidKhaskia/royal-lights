@@ -120,6 +120,45 @@ final inventoryItemsProvider =
   return service.getAll();
 });
 
+/// Bidirectional supplier↔brand index derived from saved inventory rows.
+/// `brandsBySupplier[supplierId]` → set of brand strings paired with that supplier.
+/// `suppliersByBrand[brand]` → set of supplier IDs paired with that brand.
+class InventoryBrandSupplierMap {
+  final Map<String, Set<String>> brandsBySupplier;
+  final Map<String, Set<String>> suppliersByBrand;
+  final List<String> allBrands;
+
+  const InventoryBrandSupplierMap({
+    required this.brandsBySupplier,
+    required this.suppliersByBrand,
+    required this.allBrands,
+  });
+}
+
+final inventoryBrandSupplierMapProvider =
+    FutureProvider.autoDispose<InventoryBrandSupplierMap>((ref) async {
+  final items = await ref.watch(inventoryItemsProvider.future);
+  final brandsBySupplier = <String, Set<String>>{};
+  final suppliersByBrand = <String, Set<String>>{};
+  final allBrands = <String>{};
+  for (final it in items) {
+    final brand = it.brand?.trim();
+    if (brand == null || brand.isEmpty) continue;
+    allBrands.add(brand);
+    final supplierId = it.supplierId;
+    if (supplierId != null && supplierId.isNotEmpty) {
+      brandsBySupplier.putIfAbsent(supplierId, () => <String>{}).add(brand);
+      suppliersByBrand.putIfAbsent(brand, () => <String>{}).add(supplierId);
+    }
+  }
+  final sortedBrands = allBrands.toList()..sort();
+  return InventoryBrandSupplierMap(
+    brandsBySupplier: brandsBySupplier,
+    suppliersByBrand: suppliersByBrand,
+    allBrands: sortedBrands,
+  );
+});
+
 // Rooms
 final roomsProvider = FutureProvider.autoDispose<List<Room>>((ref) async {
   final service = ref.watch(roomServiceProvider);

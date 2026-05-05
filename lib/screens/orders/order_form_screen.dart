@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import '../../config/app_theme.dart';
@@ -45,6 +46,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   final _assemblyPriceController = TextEditingController();
   final _assemblyPriceFocusNode = FocusNode();
   final _notesController = TextEditingController();
+  bool _vatEnabled = true;
+  final _discountPercentageController = TextEditingController();
+  final _discountPercentageFocusNode = FocusNode();
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
@@ -57,6 +61,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   bool get _isReadOnly =>
       _existingOrder != null &&
       (_existingOrder!.status == OrderStatus.sentToSupplier ||
+          _existingOrder!.status == OrderStatus.preparing ||
           _existingOrder!.status == OrderStatus.canceled);
 
   bool get _canSendToSupplier =>
@@ -203,9 +208,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
     _notesController.addListener(_markDirty);
     _assemblyPriceController.addListener(_markDirty);
+    _discountPercentageController.addListener(_markDirty);
     _bindSelectAllOnNumericFieldFocus(
       _assemblyPriceFocusNode,
       _assemblyPriceController,
+    );
+    _bindSelectAllOnNumericFieldFocus(
+      _discountPercentageFocusNode,
+      _discountPercentageController,
     );
     _customerFocusNode.addListener(_onCustomerFocusChange);
     if (widget.orderId != null) {
@@ -236,6 +246,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _assemblyDate = order.assemblyDate;
         _assemblyPriceController.text =
             order.assemblyPrice > 0 ? order.assemblyPrice.toString() : '';
+        _vatEnabled = order.vatEnabled;
+        _discountPercentageController.text = order.discountPercentage > 0
+            ? _formatDiscountPercent(order.discountPercentage)
+            : '';
         _notesController.text = order.notes ?? '';
         _items = order.items.map((item) {
           final row = _ItemRow();
@@ -310,14 +324,32 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     return double.tryParse(t) ?? 0;
   }
 
-  /// Line items + installation (when required). Stored in DB as `total_price`.
+  /// Line items + installation (when required).
   double get _totalPrice => _linesSubtotal + _assemblyInstallPrice;
 
-  /// Pre-VAT amount for display (same as persisted `total_price`).
+  /// Pre-VAT, pre-discount amount for display.
   double get _subtotalExVat => _totalPrice;
   static const double _vatRate = 0.18;
-  double get _vatAmount => _subtotalExVat * _vatRate;
-  double get _grandTotalWithVat => _subtotalExVat + _vatAmount;
+  double get _vatAmount => _vatEnabled ? _subtotalExVat * _vatRate : 0;
+  double get _totalWithVat => _subtotalExVat + _vatAmount;
+
+  String _formatDiscountPercent(double v) {
+    if (v == v.roundToDouble()) return v.toStringAsFixed(0);
+    return v.toStringAsFixed(2);
+  }
+
+  /// Discount percentage (0–100), parsed from controller, clamped.
+  double get _discountPercentage {
+    final t = _discountPercentageController.text.trim().replaceAll(',', '.');
+    final v = double.tryParse(t) ?? 0;
+    if (v.isNaN || v <= 0) return 0;
+    return v > 100 ? 100 : v;
+  }
+
+  double get _discountAmount => _totalWithVat * (_discountPercentage / 100);
+
+  /// Final amount stored in DB as `total_price` (VAT-inclusive, post-discount).
+  double get _grandTotalWithVat => _totalWithVat - _discountAmount;
 
   /// Synced to [Order.delivery_date] for DB triggers / warranty helpers (latest line date).
   DateTime? _orderDeliveryDateAggregate() {
@@ -584,6 +616,166 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     // If stock exists, default the "existing in store" flag on (user can override).
     if (picked.availableStock > 0) {
       row.existingInStore = true;
+    }
+  }
+
+  Future<void> _onItemImageTapped(_ItemRow row, AppLocalizations? l10n) async {
+    if (_isReadOnly) {
+      if (row.imageUrl != null && row.imageUrl!.trim().isNotEmpty) {
+        _showImagePreview(row.imageUrl!, l10n);
+      }
+      return;
+    }
+    final hasImage =
+        row.imageUrl != null && row.imageUrl!.trim().isNotEmpty;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasImage)
+              ListTile(
+                leading: const Icon(Icons.visibility_outlined),
+                title: Text(l10n?.tr('view') ?? 'View'),
+                onTap: () => Navigator.pop(ctx, 'view'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(_orderTableColumnLabel(
+                context,
+                l10n,
+                'takePhoto',
+                en: 'Take photo',
+                he: 'צילום תמונה',
+                ar: 'التقاط صورة',
+              )),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(_orderTableColumnLabel(
+                context,
+                l10n,
+                'chooseFromGallery',
+                en: 'Choose from gallery',
+                he: 'בחירה מהגלריה',
+                ar: 'اختيار من المعرض',
+              )),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            if (hasImage)
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: AppTheme.error),
+                title: Text(
+                  _orderTableColumnLabel(
+                    context,
+                    l10n,
+                    'removeImage',
+                    en: 'Remove image',
+                    he: 'הסרת תמונה',
+                    ar: 'إزالة الصورة',
+                  ),
+                  style: TextStyle(color: AppTheme.error),
+                ),
+                onTap: () => Navigator.pop(ctx, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+
+    if (action == 'view' && hasImage) {
+      _showImagePreview(row.imageUrl!, l10n);
+      return;
+    }
+    if (action == 'remove') {
+      setState(() {
+        row.imageUrl = null;
+        _markDirty();
+      });
+      return;
+    }
+    if (action == 'camera' || action == 'gallery') {
+      await _pickImageForRow(
+        row,
+        action == 'camera' ? ImageSource.camera : ImageSource.gallery,
+      );
+    }
+  }
+
+  Future<void> _pickImageForRow(_ItemRow row, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final xFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (xFile == null || !mounted) return;
+      final bytes = await xFile.readAsBytes();
+      final fileKey = row.orderItemId ??
+          'tmp/${DateTime.now().microsecondsSinceEpoch}-${row.hashCode}';
+      final url = await ref
+          .read(orderServiceProvider)
+          .uploadOrderItemPhoto(fileKey, bytes);
+      if (!mounted) return;
+      setState(() {
+        row.imageUrl = url;
+        _markDirty();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.error,
+          content: Text('${AppLocalizations.of(context)?.tr('error') ?? 'Error'}: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoveItemImage(
+    _ItemRow row,
+    AppLocalizations? l10n,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_orderTableColumnLabel(
+          context,
+          l10n,
+          'removeImage',
+          en: 'Remove image',
+          he: 'הסרת תמונה',
+          ar: 'إزالة الصورة',
+        )),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n?.tr('cancel') ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: Text(l10n?.tr('remove') ?? 'Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      setState(() {
+        row.imageUrl = null;
+        _markDirty();
+      });
     }
   }
 
@@ -2009,7 +2201,26 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     final subtle = AppTheme.onPrimary.withValues(alpha: 0.72);
     final sub = _subtotalExVat;
     final vat = _vatAmount;
+    final discountPct = _discountPercentage;
+    final discount = _discountAmount;
     final grand = _grandTotalWithVat;
+    final vatToggleLabel = _vatEnabled
+        ? _orderTableColumnLabel(
+            context,
+            l10n,
+            'vatRemove',
+            en: 'Disable VAT',
+            he: 'הורדת מע״מ',
+            ar: 'إلغاء الضريبة',
+          )
+        : _orderTableColumnLabel(
+            context,
+            l10n,
+            'vatEnable',
+            en: 'Enable VAT',
+            he: 'הפעלת מע״מ',
+            ar: 'تفعيل الضريبة',
+          );
 
     return Container(
       decoration: BoxDecoration(
@@ -2030,6 +2241,97 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: _isReadOnly
+                      ? null
+                      : () {
+                          setState(() {
+                            _vatEnabled = !_vatEnabled;
+                            _hasUnsavedChanges = true;
+                          });
+                        },
+                  icon: Icon(
+                    _vatEnabled ? Icons.percent : Icons.do_not_disturb_alt,
+                    size: 16,
+                    color: AppTheme.onPrimary,
+                  ),
+                  label: Text(
+                    vatToggleLabel,
+                    style: GoogleFonts.assistant(
+                      fontSize: fillVertical ? 11 : 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.onPrimary,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppTheme.onPrimary.withValues(alpha: 0.10),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: fillVertical ? 4 : 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: fillVertical ? 100 : 120,
+                child: TextField(
+                  controller: _discountPercentageController,
+                  focusNode: _discountPercentageFocusNode,
+                  enabled: !_isReadOnly,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.assistant(
+                    fontSize: fillVertical ? 12 : 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.onPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: fillVertical ? 6 : 10,
+                    ),
+                    filled: true,
+                    fillColor: AppTheme.onPrimary.withValues(alpha: 0.10),
+                    hintText: _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'discountPercent',
+                      en: 'Discount %',
+                      he: 'הנחה %',
+                      ar: 'خصم %',
+                    ),
+                    hintStyle: GoogleFonts.assistant(
+                      fontSize: fillVertical ? 11 : 12,
+                      color: subtle,
+                    ),
+                    suffixText: '%',
+                    suffixStyle: GoogleFonts.assistant(
+                      color: subtle,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: fillVertical ? 6 : 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2060,37 +2362,72 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
             ],
           ),
-          SizedBox(height: fillVertical ? 3 : 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  _orderTableColumnLabel(
-                    context,
-                    l10n,
-                    'vatWithRate',
-                    en: 'VAT (18%)',
-                    he: 'מע"מ (18%)',
-                    ar: 'ضريبة القيمة المضافة (18٪)',
+          if (_vatEnabled) ...[
+            SizedBox(height: fillVertical ? 3 : 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    _orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'vatWithRate',
+                      en: 'VAT (18%)',
+                      he: 'מע"מ (18%)',
+                      ar: 'ضريبة القيمة المضافة (18٪)',
+                    ),
+                    style: GoogleFonts.assistant(
+                      fontSize: fillVertical ? 12 : 14,
+                      fontWeight: FontWeight.w600,
+                      color: subtle,
+                    ),
                   ),
+                ),
+                Text(
+                  '₪${vat.toStringAsFixed(2)}',
                   style: GoogleFonts.assistant(
                     fontSize: fillVertical ? 12 : 14,
-                    fontWeight: FontWeight.w600,
-                    color: subtle,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.onPrimary,
                   ),
                 ),
-              ),
-              Text(
-                '₪${vat.toStringAsFixed(2)}',
-                style: GoogleFonts.assistant(
-                  fontSize: fillVertical ? 12 : 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.onPrimary,
+              ],
+            ),
+          ],
+          if (discountPct > 0) ...[
+            SizedBox(height: fillVertical ? 3 : 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    '${_orderTableColumnLabel(
+                      context,
+                      l10n,
+                      'discountLabel',
+                      en: 'Discount',
+                      he: 'הנחה',
+                      ar: 'خصم',
+                    )} (-${_formatDiscountPercent(discountPct)}%)',
+                    style: GoogleFonts.assistant(
+                      fontSize: fillVertical ? 12 : 14,
+                      fontWeight: FontWeight.w600,
+                      color: subtle,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                Text(
+                  '-₪${discount.toStringAsFixed(2)}',
+                  style: GoogleFonts.assistant(
+                    fontSize: fillVertical ? 12 : 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.onPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: fillVertical ? 4 : 20),
           Divider(
             height: 1,
@@ -2755,36 +3092,65 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       ),
                       const SizedBox(width: 8),
                       InkWell(
-                        onTap: (item.imageUrl == null ||
-                                item.imageUrl!.trim().isEmpty)
+                        onTap: () => _onItemImageTapped(item, l10n),
+                        onLongPress: readOnly ||
+                                item.imageUrl == null ||
+                                item.imageUrl!.trim().isEmpty
                             ? null
-                            : () => _showImagePreview(item.imageUrl!, l10n),
+                            : () => _confirmRemoveItemImage(item, l10n),
                         borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceContainerHighest
-                                .withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppTheme.outlineVariant
-                                  .withValues(alpha: 0.22),
-                            ),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: (item.imageUrl != null &&
-                                  item.imageUrl!.trim().isNotEmpty)
-                              ? CachedNetworkImage(
-                                  imageUrl: item.imageUrl!,
-                                  fit: BoxFit.cover,
-                                )
-                              : Icon(
-                                  Icons.image_outlined,
-                                  size: 18,
-                                  color:
-                                      AppTheme.outline.withValues(alpha: 0.55),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.55),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppTheme.outlineVariant
+                                      .withValues(alpha: 0.22),
                                 ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: (item.imageUrl != null &&
+                                      item.imageUrl!.trim().isNotEmpty)
+                                  ? CachedNetworkImage(
+                                      imageUrl: item.imageUrl!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Icon(
+                                      Icons.image_outlined,
+                                      size: 18,
+                                      color: AppTheme.outline
+                                          .withValues(alpha: 0.55),
+                                    ),
+                            ),
+                            if (!readOnly)
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: Container(
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppTheme.surfaceContainerLowest,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.camera_alt_rounded,
+                                    size: 11,
+                                    color: AppTheme.onPrimary,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -3280,7 +3646,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 .split('T')
                 .first,
             'assembly_price': _assemblyRequired ? _assemblyInstallPrice : 0,
-            'total_price': _totalPrice,
+            'total_price': _grandTotalWithVat,
+            'vat_enabled': _vatEnabled,
+            'discount_percentage': _discountPercentage,
             'notes': _notesController.text.trim(),
             'updated_by': username,
           },
@@ -3299,7 +3667,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           assemblyDate: _assemblyDate,
           deliveryDate: _orderDeliveryDateAggregate(),
           assemblyPrice: _assemblyRequired ? _assemblyInstallPrice : 0,
-          totalPrice: _totalPrice,
+          totalPrice: _grandTotalWithVat,
+          vatEnabled: _vatEnabled,
+          discountPercentage: _discountPercentage,
           notes: _notesController.text.trim(),
           createdBy: username,
           updatedBy: username,
@@ -3926,9 +4296,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     _customerFocusNode.removeListener(_onCustomerFocusChange);
     _notesController.removeListener(_markDirty);
     _assemblyPriceController.removeListener(_markDirty);
+    _discountPercentageController.removeListener(_markDirty);
     _notesController.dispose();
     _assemblyPriceFocusNode.dispose();
     _assemblyPriceController.dispose();
+    _discountPercentageFocusNode.dispose();
+    _discountPercentageController.dispose();
     _customerTextController.dispose();
     _customerFocusNode.dispose();
     _bottomDrawerController.dispose();

@@ -10,6 +10,7 @@ import 'l10n/app_localizations.dart';
 import 'providers/providers.dart';
 import 'screens/login_screen.dart';
 import 'widgets/app_shell.dart';
+import 'widgets/inactivity_logout_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,7 +56,7 @@ class RoyalLightApp extends ConsumerWidget {
       home: authState.when(
         data: (state) {
           if (state.session != null) {
-            return const AppShell();
+            return const InactivityLogoutWrapper(child: AppShell());
           }
           return const LoginScreen();
         },
