@@ -107,6 +107,7 @@
   "cash": "Cash",
   "credit": "Credit",
   "check": "Check",
+  "transfer": "Transfer",
   "companyName": "Company Name",
   "contactName": "Contact Name",
   "openOrders": "Open Orders",

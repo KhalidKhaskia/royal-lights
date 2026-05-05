@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order.dart';
 import '../models/order_item.dart';
@@ -213,6 +215,28 @@ class OrderService {
         .select('id')
         .eq('status', 'Active');
     return (data as List).length;
+  }
+
+  /// Upload a manually-picked image for an order item to the
+  /// `order-item-photos` bucket. Returns the public URL.
+  /// Caller passes a stable filename key (use the row's UUID; for unsaved
+  /// rows a generated UUID still works).
+  Future<String> uploadOrderItemPhoto(
+    String fileKey,
+    Uint8List imageBytes,
+  ) async {
+    const bucket = 'order-item-photos';
+    final path = '$fileKey/photo.jpg';
+    await _client.storage.from(bucket).uploadBinary(
+          path,
+          imageBytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+    final url = _client.storage.from(bucket).getPublicUrl(path);
+    final ts = DateTime.now().millisecondsSinceEpoch.toString();
+    final uri = Uri.parse(url);
+    final qp = Map<String, String>.from(uri.queryParameters)..['v'] = ts;
+    return uri.replace(queryParameters: qp).toString();
   }
 
   Future<int> getUpcomingAssembliesCount() async {
