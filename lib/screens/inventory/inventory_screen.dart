@@ -2455,11 +2455,17 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 const SizedBox(height: 14),
                 suppliersAsync.when(
                   data: (suppliers) {
+                    String supplierLabel(Supplier s) {
+                      final contact = s.contactName?.trim();
+                      if (contact != null && contact.isNotEmpty) return contact;
+                      return s.companyName;
+                    }
+
                     final entries = suppliers
                         .map(
                           (s) => DropdownMenuEntry<String>(
                             value: s.id,
-                            label: s.companyName,
+                            label: supplierLabel(s),
                           ),
                         )
                         .toList();
@@ -2500,7 +2506,20 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                               iconSize: 18,
                             )(context, controller);
                           },
-                          onSelected: (v) => setState(() => _supplierId = v),
+                          onSelected: (v) {
+                            setState(() {
+                              _supplierId = v;
+                              if (v != null) {
+                                final s = suppliers.firstWhere(
+                                  (e) => e.id == v,
+                                  orElse: () => suppliers.first,
+                                );
+                                _brandCtrl.text = s.companyName;
+                              } else {
+                                _brandCtrl.text = '';
+                              }
+                            });
+                          },
                           dropdownMenuEntries: entries,
                         );
                       },
@@ -2527,6 +2546,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                     ar: 'شركة / ماركة',
                   ),
                   icon: Icons.storefront_outlined,
+                  readOnly: _supplierId != null && _supplierId!.isNotEmpty,
                 ),
                 const SizedBox(height: 14),
                 _buildField(
@@ -2908,6 +2928,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
     required IconData icon,
     TextInputType? keyboardType,
     int maxLines = 1,
+    bool readOnly = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -2920,6 +2941,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
       child: TextField(
         controller: controller,
         enabled: !_saving,
+        readOnly: readOnly,
         maxLines: maxLines,
         keyboardType: keyboardType,
         style: GoogleFonts.assistant(fontSize: 14, color: AppTheme.onSurface),
