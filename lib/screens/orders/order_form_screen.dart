@@ -61,6 +61,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   bool get _isReadOnly =>
       _existingOrder != null &&
       (_existingOrder!.status == OrderStatus.sentToSupplier ||
+          _existingOrder!.status == OrderStatus.preparing ||
           _existingOrder!.status == OrderStatus.canceled);
 
   bool get _canSendToSupplier =>

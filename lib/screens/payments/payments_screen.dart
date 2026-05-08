@@ -46,7 +46,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
-  /// `all` | `cash` | `credit` | `check`
+  /// `all` | `cash` | `credit` | `check` | `transfer`
   String _typeFilterKey = 'all';
 
   @override
