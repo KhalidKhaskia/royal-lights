@@ -93,9 +93,9 @@ class Order {
   final double assemblyPrice;
   final OrderStatus status;
   final double totalPrice;
-  /// Whether 18% VAT is added to the order total. Defaults to true.
+  /// Whether 18% VAT is applied to the order total. Default true.
   final bool vatEnabled;
-  /// Discount percentage applied to the VAT-inclusive grand total (0–100).
+  /// Discount percentage (0–100) applied to the VAT-inclusive grand total.
   final double discountPercentage;
   final String? notes;
   final String? createdBy;

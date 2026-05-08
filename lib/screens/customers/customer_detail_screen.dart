@@ -10,6 +10,7 @@ import '../../config/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/customer.dart';
 import '../../models/order.dart';
+import '../../models/order_item.dart';
 import '../../models/payment.dart';
 import '../../providers/providers.dart';
 import '../../services/whatsapp_service.dart';
@@ -140,8 +141,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
-  Future<void> _sendWhatsAppReport(
-      BuildContext context, AppLocalizations? l10n) async {
+  String? _resolveCustomerWhatsAppPhone(AppLocalizations? l10n) {
     if (_customer.phones.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -149,26 +149,23 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           backgroundColor: AppTheme.error,
         ),
       );
-      return;
+      return null;
     }
-
     String phone = _customer.phones.first.replaceAll(RegExp(r'\D'), '');
     if (phone.startsWith('0')) {
       phone = '972${phone.substring(1)}';
     } else if (!phone.startsWith('972')) {
       phone = '972$phone';
     }
+    return phone;
+  }
 
-    final code = Localizations.localeOf(context).languageCode;
-    final orders = await ref.read(customerOrdersProvider(_customer.id).future);
-    final payments =
-        await ref.read(customerPaymentsProvider(_customer.id).future);
-    final message = _buildCustomerReportMessage(
-      languageCode: code,
-      orders: orders,
-      payments: payments,
-    );
-
+  Future<void> _sendWhatsAppPayload(
+    BuildContext context,
+    AppLocalizations? l10n,
+    String phone,
+    String message,
+  ) async {
     final result = await WhatsAppService.sendMessage(phone, message);
     if (!context.mounted) return;
     if (result) {
@@ -189,39 +186,55 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
-  String _buildCustomerReportMessage({
+  Future<void> _sendPaymentsReport(
+      BuildContext context, AppLocalizations? l10n) async {
+    final phone = _resolveCustomerWhatsAppPhone(l10n);
+    if (phone == null) return;
+
+    final code = Localizations.localeOf(context).languageCode;
+    final payments =
+        await ref.read(customerPaymentsProvider(_customer.id).future);
+    final message =
+        _buildPaymentsReportMessage(languageCode: code, payments: payments);
+    if (!context.mounted) return;
+    await _sendWhatsAppPayload(context, l10n, phone, message);
+  }
+
+  Future<void> _sendOrdersReport(
+      BuildContext context, AppLocalizations? l10n) async {
+    final phone = _resolveCustomerWhatsAppPhone(l10n);
+    if (phone == null) return;
+
+    final code = Localizations.localeOf(context).languageCode;
+    final orders = await ref
+        .read(customerOrdersWithItemsProvider(_customer.id).future);
+    final message =
+        _buildOrdersReportMessage(languageCode: code, orders: orders);
+    if (!context.mounted) return;
+    await _sendWhatsAppPayload(context, l10n, phone, message);
+  }
+
+  String _greeting(String lang) {
+    final name = _customer.customerName.trim().isNotEmpty
+        ? _customer.customerName
+        : _customer.cardName;
+    return switch (lang) {
+      'he' => 'שלום $name,',
+      'ar' => 'مرحبًا $name،',
+      _ => 'Hello $name,',
+    };
+  }
+
+  String _normalizeLang(String code) =>
+      (code == 'he' || code == 'ar') ? code : 'en';
+
+  String _buildPaymentsReportMessage({
     required String languageCode,
-    required List<Order> orders,
     required List<Payment> payments,
   }) {
-    final lang = (languageCode == 'he' || languageCode == 'ar') ? languageCode : 'en';
+    final lang = _normalizeLang(languageCode);
     final money = NumberFormat('#,##0.00', 'en_US');
     final dateFmt = DateFormat('dd/MM/yyyy');
-
-    final greetingName =
-        _customer.customerName.trim().isNotEmpty ? _customer.customerName : _customer.cardName;
-
-    final greeting = switch (lang) {
-      'he' => 'שלום $greetingName,',
-      'ar' => 'مرحبًا $greetingName،',
-      _ => 'Hello $greetingName,',
-    };
-
-    final ordersHeader = switch (lang) {
-      'he' => '📋 דוח הזמנות:',
-      'ar' => '📋 تقرير الطلبات:',
-      _ => '📋 Orders report:',
-    };
-    final ordersTotalLabel = switch (lang) {
-      'he' => 'סה"כ',
-      'ar' => 'الإجمالي',
-      _ => 'Total',
-    };
-    final ordersWord = switch (lang) {
-      'he' => 'הזמנות',
-      'ar' => 'طلبات',
-      _ => 'orders',
-    };
 
     final accountHeader = switch (lang) {
       'he' => '💳 דוח חשבון:',
@@ -233,46 +246,204 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       'ar' => 'الدفعات الأخيرة:',
       _ => 'Recent payments:',
     };
+    final noPaymentsLine = switch (lang) {
+      'he' => 'לא נרשמו תשלומים.',
+      'ar' => 'لا توجد دفعات مسجلة.',
+      _ => 'No payments on record.',
+    };
+    final totalBilledLabel = switch (lang) {
+      'he' => 'סה"כ לחיוב',
+      'ar' => 'إجمالي المستحق',
+      _ => 'Total billed',
+    };
+    final paidLabel = switch (lang) {
+      'he' => 'שולם',
+      'ar' => 'المدفوع',
+      _ => 'Paid',
+    };
+    final remainingLabel = switch (lang) {
+      'he' => 'נשאר',
+      'ar' => 'المتبقي',
+      _ => 'Remaining',
+    };
     final accountStatusLabel = switch (lang) {
       'he' => 'מצב החשבון',
       'ar' => 'حالة الحساب',
       _ => 'Account status',
     };
 
-    final sections = <String>[greeting];
+    final totalPaid =
+        payments.fold<double>(0, (sum, p) => sum + p.amount);
+    final remaining = _customer.remainingDebt;
+    final totalBilled = totalPaid + remaining;
 
-    if (orders.isNotEmpty) {
-      final counts = <OrderStatus, int>{};
-      for (final o in orders) {
-        counts[o.status] = (counts[o.status] ?? 0) + 1;
+    final lines = <String>[
+      accountHeader,
+      '$totalBilledLabel: ₪${money.format(totalBilled)}',
+      '$paidLabel: ₪${money.format(totalPaid)}',
+      '$remainingLabel: ₪${money.format(remaining)}',
+      '',
+    ];
+    if (payments.isNotEmpty) {
+      lines.add(paymentsListHeader);
+      final sorted = [...payments]..sort((a, b) => b.date.compareTo(a.date));
+      for (final p in sorted) {
+        lines.add(
+            '• ${dateFmt.format(p.date)} - ₪${money.format(p.amount)} (${_paymentTypeLabel(p.type, lang)})');
       }
-      final lines = <String>[ordersHeader];
-      for (final status in OrderStatusExtension.all) {
-        final c = counts[status] ?? 0;
-        if (c == 0) continue;
-        lines.add('• ${_statusLabel(status, lang)}: $c');
-      }
-      lines.add('$ordersTotalLabel: ${orders.length} $ordersWord');
-      sections.add(lines.join('\n'));
+    } else {
+      lines.add(noPaymentsLine);
+    }
+    lines.add('');
+    lines.add(
+        '$accountStatusLabel: ${_accountStatusText(_customer.remainingDebt, lang, money)}');
+
+    return [_greeting(lang), lines.join('\n')].join('\n\n');
+  }
+
+  String _buildOrdersReportMessage({
+    required String languageCode,
+    required List<Order> orders,
+  }) {
+    final lang = _normalizeLang(languageCode);
+    final money = NumberFormat('#,##0.00', 'en_US');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    final ordersHeader = switch (lang) {
+      'he' => '📋 דוח הזמנות פתוחות:',
+      'ar' => '📋 تقرير الطلبات المفتوحة:',
+      _ => '📋 Open orders report:',
+    };
+    final orderLabel = switch (lang) {
+      'he' => 'הזמנה',
+      'ar' => 'طلب',
+      _ => 'Order',
+    };
+    final qtyLabel = switch (lang) {
+      'he' => 'כמות',
+      'ar' => 'الكمية',
+      _ => 'Qty',
+    };
+    final extrasLabel = switch (lang) {
+      'he' => 'תוספת',
+      'ar' => 'إضافة',
+      _ => 'Add-on',
+    };
+    final perUnitLabel = switch (lang) {
+      'he' => 'ליח׳',
+      'ar' => 'للوحدة',
+      _ => 'each',
+    };
+    final assemblyLineLabel = switch (lang) {
+      'he' => 'התקנה / הרכבה',
+      'ar' => 'تركيب',
+      _ => 'Installation',
+    };
+    final subtotalLabel = switch (lang) {
+      'he' => 'סכום ביניים',
+      'ar' => 'المجموع الفرعي',
+      _ => 'Subtotal',
+    };
+    final vatLabel = switch (lang) {
+      'he' => 'מע״מ 18%',
+      'ar' => 'ض.ق.م 18٪',
+      _ => 'VAT 18%',
+    };
+    final discountLabel = switch (lang) {
+      'he' => 'הנחה',
+      'ar' => 'خصم',
+      _ => 'Discount',
+    };
+    final finalTotalLabel = switch (lang) {
+      'he' => 'סה״כ סופי (כולל מע״מ)',
+      'ar' => 'الإجمالي النهائي (شامل الضريبة)',
+      _ => 'Final total (incl. VAT)',
+    };
+    final grandTotalLabel = switch (lang) {
+      'he' => 'סה״כ כולל לתשלום',
+      'ar' => 'الإجمالي الشامل المستحق',
+      _ => 'Grand total due',
+    };
+    final noOrdersLine = switch (lang) {
+      'he' => 'אין הזמנות פתוחות כרגע.',
+      'ar' => 'لا توجد طلبات مفتوحة حاليًا.',
+      _ => 'No open orders at this time.',
+    };
+
+    final openOrders = orders.where((o) =>
+        o.status != OrderStatus.canceled &&
+        o.status != OrderStatus.handled &&
+        o.status != OrderStatus.delivered).toList();
+
+    if (openOrders.isEmpty) {
+      return [_greeting(lang), '$ordersHeader\n$noOrdersLine'].join('\n\n');
     }
 
-    final debt = _customer.remainingDebt;
-    if (payments.isNotEmpty || debt != 0) {
-      final lines = <String>[accountHeader];
-      if (payments.isNotEmpty) {
-        lines.add(paymentsListHeader);
-        final sorted = [...payments]..sort((a, b) => b.date.compareTo(a.date));
-        for (final p in sorted) {
+    openOrders.sort((a, b) =>
+        (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+
+    final blocks = <String>[];
+    double grandTotal = 0;
+    for (final o in openOrders) {
+      grandTotal += o.totalPrice;
+      final dateStr =
+          o.createdAt != null ? ' - ${dateFmt.format(o.createdAt!)}' : '';
+      final orderNo = o.orderNumber != null ? '#${o.orderNumber}' : '';
+      final lines = <String>[
+        '──────────',
+        '$orderLabel $orderNo$dateStr',
+        _statusLabel(o.status, lang),
+      ];
+
+      double itemsSubtotal = 0;
+      for (final it in o.items) {
+        final lineTotal = (it.price + it.extrasPrice) * it.quantity;
+        itemsSubtotal += lineTotal;
+        lines.add(
+          '• ${it.name} ($qtyLabel ${formatQty(it.quantity)} × ₪${money.format(it.price)}) = ₪${money.format(it.price * it.quantity)}',
+        );
+        final hasExtras =
+            (it.extras != null && it.extras!.trim().isNotEmpty) ||
+                it.extrasPrice > 0;
+        if (hasExtras) {
+          final extrasName = (it.extras != null && it.extras!.trim().isNotEmpty)
+              ? ' "${it.extras!.trim()}"'
+              : '';
           lines.add(
-              '• ${dateFmt.format(p.date)} - ₪${money.format(p.amount)} (${_paymentTypeLabel(p.type, lang)})');
+            '   ➕ $extrasLabel$extrasName: ₪${money.format(it.extrasPrice)} $perUnitLabel = ₪${money.format(it.extrasPrice * it.quantity)}',
+          );
         }
-        lines.add('');
       }
-      lines.add('$accountStatusLabel: ${_accountStatusText(debt, lang, money)}');
-      sections.add(lines.join('\n'));
+
+      final subtotalExVat = itemsSubtotal + o.assemblyPrice;
+      if (o.assemblyPrice > 0) {
+        lines.add('• $assemblyLineLabel: ₪${money.format(o.assemblyPrice)}');
+      }
+      lines.add('$subtotalLabel: ₪${money.format(subtotalExVat)}');
+      if (o.vatEnabled) {
+        final vatAmount = subtotalExVat * 0.18;
+        lines.add('$vatLabel: ₪${money.format(vatAmount)}');
+      }
+      if (o.discountPercentage > 0) {
+        final totalWithVat =
+            o.vatEnabled ? subtotalExVat * 1.18 : subtotalExVat;
+        final discountAmount = totalWithVat * (o.discountPercentage / 100);
+        lines.add(
+          '$discountLabel ${formatQty(o.discountPercentage)}%: -₪${money.format(discountAmount)}',
+        );
+      }
+      lines.add('$finalTotalLabel: ₪${money.format(o.totalPrice)}');
+      blocks.add(lines.join('\n'));
     }
 
-    return sections.join('\n\n');
+    blocks.add('──────────');
+    blocks.add('$grandTotalLabel: ₪${money.format(grandTotal)}');
+
+    return [
+      _greeting(lang),
+      ordersHeader,
+      blocks.join('\n'),
+    ].join('\n\n');
   }
 
   String _statusLabel(OrderStatus s, String lang) {
@@ -470,7 +641,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       );
                     },
                     onEditDetails: () => _openEditDialog(l10n),
-                    onSendReport: () => _sendWhatsAppReport(context, l10n),
+                    onSendPaymentsReport: () =>
+                        _sendPaymentsReport(context, l10n),
+                    onSendOrdersReport: () =>
+                        _sendOrdersReport(context, l10n),
                     onDeleteCustomer: () => _deleteCustomer(l10n),
                     deletingCustomer: _deletingCustomer,
                   ),
@@ -520,7 +694,8 @@ class _HeroBanner extends ConsumerStatefulWidget {
   final AsyncValue<List<Order>> ordersAsync;
   final VoidCallback onNewOrder;
   final VoidCallback onEditDetails;
-  final VoidCallback onSendReport;
+  final VoidCallback onSendPaymentsReport;
+  final VoidCallback onSendOrdersReport;
   final VoidCallback onDeleteCustomer;
   final bool deletingCustomer;
 
@@ -530,7 +705,8 @@ class _HeroBanner extends ConsumerStatefulWidget {
     required this.ordersAsync,
     required this.onNewOrder,
     required this.onEditDetails,
-    required this.onSendReport,
+    required this.onSendPaymentsReport,
+    required this.onSendOrdersReport,
     required this.onDeleteCustomer,
     required this.deletingCustomer,
   });
@@ -695,7 +871,8 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     final ordersAsync = widget.ordersAsync;
     final l10n = widget.l10n;
     final onEditDetails = widget.onEditDetails;
-    final onSendReport = widget.onSendReport;
+    final onSendPaymentsReport = widget.onSendPaymentsReport;
+    final onSendOrdersReport = widget.onSendOrdersReport;
     final onNewOrder = widget.onNewOrder;
     final onDeleteCustomer = widget.onDeleteCustomer;
     final deletingCustomer = widget.deletingCustomer;
@@ -1056,17 +1233,37 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
-                        onPressed: onSendReport,
+                        onPressed: onSendPaymentsReport,
                         style: actionStyle(AppTheme.success, AppTheme.success),
-                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        icon: const Icon(Icons.payments_outlined, size: 18),
                         label: Text(
                           _trOrLocale(
                             context,
                             l10n,
-                            'sendAccountReport',
-                            en: 'Send report',
-                            he: 'שליחת דוח',
-                            ar: 'إرسال تقرير',
+                            'sendPaymentsReport',
+                            en: 'Send payments report',
+                            he: 'שלח דוח תשלומים',
+                            ar: 'إرسال تقرير الدفعات',
+                          ),
+                          style: GoogleFonts.assistant(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: onSendOrdersReport,
+                        style: actionStyle(AppTheme.success, AppTheme.success),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: Text(
+                          _trOrLocale(
+                            context,
+                            l10n,
+                            'sendOrdersReport',
+                            en: 'Send orders report',
+                            he: 'שלח דוח הזמנות',
+                            ar: 'إرسال تقرير الطلبات',
                           ),
                           style: GoogleFonts.assistant(
                             fontWeight: FontWeight.w700,
