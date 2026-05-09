@@ -654,7 +654,7 @@ class _AssemblyLineTile extends StatelessWidget {
               ),
             ),
             child: Text(
-              '${l10n?.tr('quantity') ?? 'Qty'}: ${formatQty(item.quantity)}',
+              '${l10n?.tr('quantity') ?? 'Qty'}: ${item.quantity}',
               style: GoogleFonts.assistant(
                 color: AppTheme.onSurfaceVariant,
                 fontSize: 13,

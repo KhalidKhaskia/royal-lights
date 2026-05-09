@@ -5,25 +5,13 @@ int _warrantyYearsFromJson(dynamic value) {
   return 0;
 }
 
-/// Formats a (possibly fractional) quantity for display.
-/// Returns "1" for whole numbers, "1.5" / "1.25" for fractional values
-/// (trailing zeros stripped, max 3 decimals).
-String formatQty(double q) {
-  if (q == q.roundToDouble()) return q.toInt().toString();
-  var s = q.toStringAsFixed(3);
-  s = s.replaceFirst(RegExp(r'0+$'), '');
-  s = s.replaceFirst(RegExp(r'\.$'), '');
-  return s;
-}
-
 class OrderItem {
   final String? id;
   final String? orderId;
   final String? itemNumber; // 1. Item Number (Barcode)
   final String name; // 2. Name
   final String? imageUrl; // 3. Image
-  /// Quantity. May be fractional (e.g. 1.5 m of cable, 0.75 kg).
-  final double quantity; // 4. Quantity
+  final int quantity; // 4. Quantity
   final String? extras; // 5. Extras
   /// Line-level text; order form uses this for the per-line supplier (WhatsApp) note.
   final String? notes; // 6. Notes (optional)
@@ -99,7 +87,7 @@ class OrderItem {
       itemNumber: json['item_number'] as String?,
       name: json['name'] as String? ?? '',
       imageUrl: json['image_url'] as String?,
-      quantity: (json['quantity'] as num?)?.toDouble() ?? 1,
+      quantity: json['quantity'] as int? ?? 1,
       extras: json['extras'] as String?,
       notes: json['notes'] as String?,
       price: (json['price'] as num?)?.toDouble() ?? 0,
@@ -177,7 +165,7 @@ class OrderItem {
     String? itemNumber,
     String? name,
     String? imageUrl,
-    double? quantity,
+    int? quantity,
     String? extras,
     String? notes,
     double? price,

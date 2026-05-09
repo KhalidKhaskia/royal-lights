@@ -2438,17 +2438,21 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                 const SizedBox(height: 14),
                 suppliersAsync.when(
                   data: (suppliers) {
-                    String supplierLabel(Supplier s) {
-                      final contact = s.contactName?.trim();
-                      if (contact != null && contact.isNotEmpty) return contact;
-                      return s.companyName;
-                    }
-
-                    final entries = suppliers
+                    final brandText = _brandCtrl.text.trim();
+                    final allowedSupplierIds =
+                        brandText.isNotEmpty && brandMap != null
+                            ? brandMap.suppliersByBrand[brandText]
+                            : null;
+                    final filteredSuppliers = allowedSupplierIds == null
+                        ? suppliers
+                        : suppliers
+                            .where((s) => allowedSupplierIds.contains(s.id))
+                            .toList();
+                    final entries = filteredSuppliers
                         .map(
                           (s) => DropdownMenuEntry<String>(
                             value: s.id,
-                            label: supplierLabel(s),
+                            label: s.companyName,
                           ),
                         )
                         .toList();
@@ -2492,14 +2496,15 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                           onSelected: (v) {
                             setState(() {
                               _supplierId = v;
-                              if (v != null) {
-                                final s = suppliers.firstWhere(
-                                  (e) => e.id == v,
-                                  orElse: () => suppliers.first,
-                                );
-                                _brandCtrl.text = s.companyName;
-                              } else {
-                                _brandCtrl.text = '';
+                              if (v != null && brandMap != null) {
+                                final pairedBrands =
+                                    brandMap.brandsBySupplier[v];
+                                final currentBrand = _brandCtrl.text.trim();
+                                if (pairedBrands != null &&
+                                    pairedBrands.length == 1 &&
+                                    currentBrand.isEmpty) {
+                                  _brandCtrl.text = pairedBrands.first;
+                                }
                               }
                             });
                           },
@@ -2518,19 +2523,7 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                _buildField(
-                  controller: _brandCtrl,
-                  label: _trOrLocale(
-                    context,
-                    l10n,
-                    'brand',
-                    en: 'Brand / company',
-                    he: 'חברה / מותג',
-                    ar: 'شركة / ماركة',
-                  ),
-                  icon: Icons.storefront_outlined,
-                  readOnly: _supplierId != null && _supplierId!.isNotEmpty,
-                ),
+                _buildBrandField(brandMap, suppliersAsync.asData?.value),
                 const SizedBox(height: 14),
                 _buildField(
                   controller: _barcodeCtrl,
@@ -2911,7 +2904,6 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
     required IconData icon,
     TextInputType? keyboardType,
     int maxLines = 1,
-    bool readOnly = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -2924,7 +2916,6 @@ class _InventoryItemDialogState extends State<InventoryItemDialog> {
       child: TextField(
         controller: controller,
         enabled: !_saving,
-        readOnly: readOnly,
         maxLines: maxLines,
         keyboardType: keyboardType,
         style: GoogleFonts.assistant(fontSize: 14, color: AppTheme.onSurface),

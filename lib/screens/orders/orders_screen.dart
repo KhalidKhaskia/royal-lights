@@ -156,7 +156,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         final item = it as dynamic;
         final code = (item.itemNumber as String?)?.trim();
         final name = (item.name as String?)?.trim() ?? '';
-        final qty = formatQty((item.quantity as num?)?.toDouble() ?? 1);
+        final qty = (item.quantity as int?) ?? 1;
         final codePart = (code != null && code.isNotEmpty) ? '($code)\n' : '';
         return '$codePart$name\nQty: $qty';
       }).join('\n\n');
@@ -2116,7 +2116,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                       ],
                                                       const SizedBox(height: 2),
                                                       Text(
-                                                        '×${formatQty(it.quantity)}',
+                                                        '×${it.quantity}',
                                                         style: GoogleFonts
                                                             .assistant(
                                                           fontSize: 12,
@@ -2595,7 +2595,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                                       ),
                                                       const SizedBox(height: 2),
                                                       Text(
-                                                        '×${formatQty(it.quantity)}',
+                                                        '×${it.quantity}',
                                                         style: GoogleFonts
                                                             .assistant(
                                                           fontSize: 12,
@@ -2735,7 +2735,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               .where((i) => i.id != null && selected.contains(i.id))
               .toList();
           final itemsBlock = selectedItems
-              .map((it) => '${it.name}\n×${formatQty(it.quantity)}')
+              .map((it) => '${it.name}\n×${it.quantity}')
               .join('\n\n');
           await _openWhatsAppToPhone(
             phone,

@@ -69,8 +69,11 @@ class OrderService {
 
   Future<Order> create(Order order, List<OrderItem> items) async {
     // Insert order
-    final orderData =
-        await _client.from('orders').insert(order.toJson()).select().single();
+    final orderData = await _client
+        .from('orders')
+        .insert(order.toJson())
+        .select()
+        .single();
     final orderId = orderData['id'] as String;
 
     // Insert items
@@ -94,7 +97,8 @@ class OrderService {
   Future<void> updateStatus(String id, String status, String username) async {
     await _client
         .from('orders')
-        .update({'status': status, 'updated_by': username}).eq('id', id);
+        .update({'status': status, 'updated_by': username})
+        .eq('id', id);
   }
 
   /// Marks line items as received from supplier (workflow). [itemIds] are order_items.id.
@@ -152,8 +156,7 @@ class OrderService {
 
     final status = order['status'] as String?;
     final deliveryRaw = order['delivery_date'] as String?;
-    final deliveryDate =
-        deliveryRaw != null ? DateTime.parse(deliveryRaw) : null;
+    final deliveryDate = deliveryRaw != null ? DateTime.parse(deliveryRaw) : null;
 
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
@@ -162,8 +165,7 @@ class OrderService {
     if (status == OrderStatus.delivered.dbValue) {
       start = deliveryDate ?? todayDate;
     } else if (deliveryDate != null) {
-      final dd =
-          DateTime(deliveryDate.year, deliveryDate.month, deliveryDate.day);
+      final dd = DateTime(deliveryDate.year, deliveryDate.month, deliveryDate.day);
       if (!dd.isAfter(todayDate)) start = dd;
     }
     if (start == null) return;
@@ -182,7 +184,8 @@ class OrderService {
   Future<void> cancelOrder(String id, String username) async {
     await _client
         .from('orders')
-        .update({'status': 'Canceled', 'updated_by': username}).eq('id', id);
+        .update({'status': 'Canceled', 'updated_by': username})
+        .eq('id', id);
   }
 
   Future<void> updateItems(
@@ -206,31 +209,11 @@ class OrderService {
     }
   }
 
-  /// Uploads a manually-picked photo for an order item to the
-  /// `order-item-photos` bucket and returns a public URL with cache-buster.
-  /// `fileKey` should be stable per-row (e.g. the saved `order_items.id`,
-  /// or a generated id for unsaved rows).
-  Future<String> uploadOrderItemPhoto(
-    String fileKey,
-    Uint8List imageBytes,
-  ) async {
-    const bucket = 'order-item-photos';
-    final path = '$fileKey/photo.jpg';
-    await _client.storage.from(bucket).uploadBinary(
-          path,
-          imageBytes,
-          fileOptions: const FileOptions(upsert: true),
-        );
-    final url = _client.storage.from(bucket).getPublicUrl(path);
-    final ts = DateTime.now().millisecondsSinceEpoch.toString();
-    final uri = Uri.parse(url);
-    final qp = Map<String, String>.from(uri.queryParameters)..['v'] = ts;
-    return uri.replace(queryParameters: qp).toString();
-  }
-
   Future<int> getOpenOrdersCount() async {
-    final data =
-        await _client.from('orders').select('id').eq('status', 'Active');
+    final data = await _client
+        .from('orders')
+        .select('id')
+        .eq('status', 'Active');
     return (data as List).length;
   }
 

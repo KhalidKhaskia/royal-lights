@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
 
-/// Signs the user out after a fixed period of input inactivity.
-/// Resets the timer on any pointer interaction inside the subtree.
+/// Wraps the authenticated app shell and signs the user out after a fixed
+/// period of input inactivity. Resets the timer on any pointer interaction
+/// inside the subtree.
 class InactivityLogoutWrapper extends ConsumerStatefulWidget {
-  static const Duration timeout = Duration(minutes: 20);
+  static const Duration timeout = Duration(minutes: 30);
 
   final Widget child;
 
@@ -47,7 +48,7 @@ class _InactivityLogoutWrapperState
     try {
       await ref.read(authServiceProvider).signOut();
     } catch (_) {
-      // Auth state stream drives navigation; swallow transient errors.
+      // Auth state stream still drives navigation; swallow transient errors.
     } finally {
       _signingOut = false;
     }

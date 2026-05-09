@@ -47,8 +47,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   final _assemblyPriceFocusNode = FocusNode();
   final _notesController = TextEditingController();
   bool _vatEnabled = true;
-  final _discountPctController = TextEditingController();
-  final _discountPctFocusNode = FocusNode();
+  final _discountPercentageController = TextEditingController();
+  final _discountPercentageFocusNode = FocusNode();
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
@@ -185,11 +185,6 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     setState(() => _hasUnsavedChanges = true);
   }
 
-  void _onDiscountChanged() {
-    if (!mounted) return;
-    setState(() {});
-  }
-
   final _customerSelectorKey = GlobalKey();
   OverlayEntry? _customerOverlayEntry;
   OverlayEntry? _inventoryOverlayEntry;
@@ -213,15 +208,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
     _notesController.addListener(_markDirty);
     _assemblyPriceController.addListener(_markDirty);
-    _discountPctController.addListener(_markDirty);
-    _discountPctController.addListener(_onDiscountChanged);
+    _discountPercentageController.addListener(_markDirty);
     _bindSelectAllOnNumericFieldFocus(
       _assemblyPriceFocusNode,
       _assemblyPriceController,
     );
     _bindSelectAllOnNumericFieldFocus(
-      _discountPctFocusNode,
-      _discountPctController,
+      _discountPercentageFocusNode,
+      _discountPercentageController,
     );
     _customerFocusNode.addListener(_onCustomerFocusChange);
     if (widget.orderId != null) {
@@ -253,8 +247,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _assemblyPriceController.text =
             order.assemblyPrice > 0 ? order.assemblyPrice.toString() : '';
         _vatEnabled = order.vatEnabled;
-        _discountPctController.text = order.discountPercentage > 0
-            ? formatQty(order.discountPercentage)
+        _discountPercentageController.text = order.discountPercentage > 0
+            ? _formatDiscountPercent(order.discountPercentage)
             : '';
         _notesController.text = order.notes ?? '';
         _items = order.items.map((item) {
@@ -262,7 +256,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           row.orderItemId = item.id;
           row.itemNumberCtrl.text = item.itemNumber ?? '';
           row.nameCtrl.text = item.name;
-          row.quantityCtrl.text = formatQty(item.quantity);
+          row.quantityCtrl.text = item.quantity.toString();
           row.extrasCtrl.text = item.extras ?? '';
           row.priceCtrl.text = item.price.toString();
           row.extrasPriceCtrl.text =
@@ -304,15 +298,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
   }
 
-  double _parseQty(String raw) {
-    final t = raw.trim().replaceAll(',', '.');
-    final v = double.tryParse(t);
-    if (v == null || v <= 0) return 1;
-    return v;
-  }
-
   double _lineTotal(_ItemRow item) {
-    final qty = _parseQty(item.quantityCtrl.text);
+    final qty = int.tryParse(item.quantityCtrl.text) ?? 1;
     final unitText = item.priceCtrl.text.trim().replaceAll(',', '.');
     final extrasText = item.extrasPriceCtrl.text.trim().replaceAll(',', '.');
     final unit = double.tryParse(unitText) ?? 0;
@@ -346,18 +333,22 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   double get _vatAmount => _vatEnabled ? _subtotalExVat * _vatRate : 0;
   double get _totalWithVat => _subtotalExVat + _vatAmount;
 
-  /// Discount percentage (0–100), parsed from controller and clamped.
+  String _formatDiscountPercent(double v) {
+    if (v == v.roundToDouble()) return v.toStringAsFixed(0);
+    return v.toStringAsFixed(2);
+  }
+
+  /// Discount percentage (0–100), parsed from controller, clamped.
   double get _discountPercentage {
-    final t = _discountPctController.text.trim().replaceAll(',', '.');
+    final t = _discountPercentageController.text.trim().replaceAll(',', '.');
     final v = double.tryParse(t) ?? 0;
     if (v.isNaN || v <= 0) return 0;
     return v > 100 ? 100 : v;
   }
 
-  /// Discount amount in shekels (applied to the VAT-inclusive total).
   double get _discountAmount => _totalWithVat * (_discountPercentage / 100);
 
-  /// Final amount stored in DB as `total_price`.
+  /// Final amount stored in DB as `total_price` (VAT-inclusive, post-discount).
   double get _grandTotalWithVat => _totalWithVat - _discountAmount;
 
   /// Synced to [Order.delivery_date] for DB triggers / warranty helpers (latest line date).
@@ -628,20 +619,15 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     }
   }
 
-  /// True when this row was entered manually and is NOT linked to an
-  /// inventory item — only such rows can have an image uploaded.
-  bool _rowIsManualEntry(_ItemRow row) =>
-      row.inventoryItemId == null || row.inventoryItemId!.isEmpty;
-
   Future<void> _onItemImageTapped(_ItemRow row, AppLocalizations? l10n) async {
-    final hasImage =
-        row.imageUrl != null && row.imageUrl!.trim().isNotEmpty;
-
-    // For inventory-linked items or read-only orders: only preview.
-    if (_isReadOnly || !_rowIsManualEntry(row)) {
-      if (hasImage) _showImagePreview(row.imageUrl!, l10n);
+    if (_isReadOnly) {
+      if (row.imageUrl != null && row.imageUrl!.trim().isNotEmpty) {
+        _showImagePreview(row.imageUrl!, l10n);
+      }
       return;
     }
+    final hasImage =
+        row.imageUrl != null && row.imageUrl!.trim().isNotEmpty;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -656,14 +642,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             if (hasImage)
               ListTile(
                 leading: const Icon(Icons.visibility_outlined),
-                title: Text(_orderTableColumnLabel(
-                  context,
-                  l10n,
-                  'view',
-                  en: 'View',
-                  he: 'הצג',
-                  ar: 'عرض',
-                )),
+                title: Text(l10n?.tr('view') ?? 'View'),
                 onTap: () => Navigator.pop(ctx, 'view'),
               ),
             ListTile(
@@ -743,9 +722,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       );
       if (xFile == null || !mounted) return;
       final bytes = await xFile.readAsBytes();
-      final fileKey = (row.orderItemId != null && row.orderItemId!.isNotEmpty)
-          ? row.orderItemId!
-          : 'tmp/${DateTime.now().microsecondsSinceEpoch}-${row.hashCode}';
+      final fileKey = row.orderItemId ??
+          'tmp/${DateTime.now().microsecondsSinceEpoch}-${row.hashCode}';
       final url = await ref
           .read(orderServiceProvider)
           .uploadOrderItemPhoto(fileKey, bytes);
@@ -759,11 +737,45 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppTheme.error,
-          content: Text(
-            '${AppLocalizations.of(context)?.tr('error') ?? 'Error'}: $e',
-          ),
+          content: Text('${AppLocalizations.of(context)?.tr('error') ?? 'Error'}: $e'),
         ),
       );
+    }
+  }
+
+  Future<void> _confirmRemoveItemImage(
+    _ItemRow row,
+    AppLocalizations? l10n,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_orderTableColumnLabel(
+          context,
+          l10n,
+          'removeImage',
+          en: 'Remove image',
+          he: 'הסרת תמונה',
+          ar: 'إزالة الصورة',
+        )),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n?.tr('cancel') ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: Text(l10n?.tr('remove') ?? 'Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      setState(() {
+        row.imageUrl = null;
+        _markDirty();
+      });
     }
   }
 
@@ -2255,8 +2267,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ),
                   ),
                   style: TextButton.styleFrom(
-                    backgroundColor:
-                        AppTheme.onPrimary.withValues(alpha: 0.10),
+                    backgroundColor: AppTheme.onPrimary.withValues(alpha: 0.10),
                     padding: EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: fillVertical ? 4 : 8,
@@ -2269,10 +2280,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ),
               const SizedBox(width: 8),
               SizedBox(
-                width: fillVertical ? 110 : 130,
+                width: fillVertical ? 100 : 120,
                 child: TextField(
-                  controller: _discountPctController,
-                  focusNode: _discountPctFocusNode,
+                  controller: _discountPercentageController,
+                  focusNode: _discountPercentageFocusNode,
                   enabled: !_isReadOnly,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -2398,7 +2409,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       en: 'Discount',
                       he: 'הנחה',
                       ar: 'خصم',
-                    )} (-${formatQty(discountPct)}%)',
+                    )} (-${_formatDiscountPercent(discountPct)}%)',
                     style: GoogleFonts.assistant(
                       fontSize: fillVertical ? 12 : 14,
                       fontWeight: FontWeight.w600,
@@ -2720,7 +2731,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       );
     }
 
-    final qty = _parseQty(item.quantityCtrl.text);
+    final qty = int.tryParse(item.quantityCtrl.text.trim()) ?? 1;
     final stock = inv.availableStock;
 
     if (stock >= qty) {
@@ -3080,90 +3091,86 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Builder(builder: (context) {
-                        final hasImg = item.imageUrl != null &&
-                            item.imageUrl!.trim().isNotEmpty;
-                        final canUpload =
-                            !readOnly && _rowIsManualEntry(item);
-                        final isInteractive = hasImg || canUpload;
-                        return InkWell(
-                          onTap: isInteractive
-                              ? () => _onItemImageTapped(item, l10n)
-                              : null,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.55),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: AppTheme.outlineVariant
-                                        .withValues(alpha: 0.22),
-                                  ),
+                      InkWell(
+                        onTap: () => _onItemImageTapped(item, l10n),
+                        onLongPress: readOnly ||
+                                item.imageUrl == null ||
+                                item.imageUrl!.trim().isEmpty
+                            ? null
+                            : () => _confirmRemoveItemImage(item, l10n),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.55),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppTheme.outlineVariant
+                                      .withValues(alpha: 0.22),
                                 ),
-                                clipBehavior: Clip.antiAlias,
-                                child: hasImg
-                                    ? CachedNetworkImage(
-                                        imageUrl: item.imageUrl!,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Icon(
-                                        Icons.image_outlined,
-                                        size: 18,
-                                        color: AppTheme.outline
-                                            .withValues(alpha: 0.55),
-                                      ),
                               ),
-                              if (canUpload)
-                                Positioned(
-                                  right: -2,
-                                  bottom: -2,
-                                  child: Container(
-                                    width: 18,
-                                    height: 18,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primary,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color:
-                                            AppTheme.surfaceContainerLowest,
-                                        width: 1.5,
-                                      ),
+                              clipBehavior: Clip.antiAlias,
+                              child: (item.imageUrl != null &&
+                                      item.imageUrl!.trim().isNotEmpty)
+                                  ? CachedNetworkImage(
+                                      imageUrl: item.imageUrl!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Icon(
+                                      Icons.image_outlined,
+                                      size: 18,
+                                      color: AppTheme.outline
+                                          .withValues(alpha: 0.55),
                                     ),
-                                    child: Icon(
-                                      Icons.camera_alt_rounded,
-                                      size: 11,
-                                      color: AppTheme.onPrimary,
+                            ),
+                            if (!readOnly)
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: Container(
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppTheme.surfaceContainerLowest,
+                                      width: 1.5,
                                     ),
                                   ),
+                                  child: Icon(
+                                    Icons.camera_alt_rounded,
+                                    size: 11,
+                                    color: AppTheme.onPrimary,
+                                  ),
                                 ),
-                            ],
-                          ),
-                        );
-                      }),
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
               DataCell(
                 SizedBox(
-                  width: 60,
+                  width: 52,
                   child: TextField(
                     controller: item.quantityCtrl,
                     focusNode: item.quantityFocusNode,
                     keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                      decimal: false,
                       signed: false,
                     ),
                     enableSuggestions: false,
                     autocorrect: false,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      FilteringTextInputFormatter.digitsOnly,
                     ],
                     enabled: !readOnly,
                     onChanged: (_) {
@@ -3602,7 +3609,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
           itemNumber: item.itemNumberCtrl.text.trim(),
           name: item.nameCtrl.text.trim(),
           imageUrl: item.imageUrl,
-          quantity: _parseQty(item.quantityCtrl.text),
+          quantity: int.tryParse(item.quantityCtrl.text) ?? 1,
           extras: item.extrasCtrl.text.trim(),
           notes: item.supplierNote.trim().isEmpty
               ? null
@@ -3905,7 +3912,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       parts.add([
         (it.itemNumber ?? '').trim(),
         it.name.trim(),
-        formatQty(it.quantity),
+        it.quantity.toString(),
         (it.extras ?? '').trim(),
         money(it.price),
         money(it.extrasPrice),
@@ -3995,7 +4002,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       final block = StringBuffer();
       block.writeln('${i + 1}) $name');
       final meta = <String>[];
-      meta.add('$qtyLabel: ${formatQty(it.quantity)}');
+      meta.add('$qtyLabel: ${it.quantity}');
       if (room.isNotEmpty) meta.add('$roomLabel: $room');
       block.writeln('   ${meta.join(' | ')}');
       if (extras.isNotEmpty) {
@@ -4077,7 +4084,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       final name =
           r.nameCtrl.text.trim().isEmpty ? '—' : r.nameCtrl.text.trim();
       final code = r.itemNumberCtrl.text.trim();
-      final qty = formatQty(_parseQty(r.quantityCtrl.text));
+      final qty =
+          r.quantityCtrl.text.trim().isEmpty ? '1' : r.quantityCtrl.text.trim();
       final noteTrim = r.supplierNote.trim();
       final block = StringBuffer();
       block.writeln('${i + 1}) $nameLabel: $name');
@@ -4288,13 +4296,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     _customerFocusNode.removeListener(_onCustomerFocusChange);
     _notesController.removeListener(_markDirty);
     _assemblyPriceController.removeListener(_markDirty);
-    _discountPctController.removeListener(_markDirty);
-    _discountPctController.removeListener(_onDiscountChanged);
+    _discountPercentageController.removeListener(_markDirty);
     _notesController.dispose();
     _assemblyPriceFocusNode.dispose();
     _assemblyPriceController.dispose();
-    _discountPctFocusNode.dispose();
-    _discountPctController.dispose();
+    _discountPercentageFocusNode.dispose();
+    _discountPercentageController.dispose();
     _customerTextController.dispose();
     _customerFocusNode.dispose();
     _bottomDrawerController.dispose();
