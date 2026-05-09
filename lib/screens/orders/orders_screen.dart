@@ -15,6 +15,7 @@ import '../../theme/order_status_colors.dart';
 import '../../widgets/app_dropdown_styles.dart';
 import '../../widgets/app_loading_overlay.dart';
 import '../../widgets/app_round_checkbox.dart';
+import '../../widgets/confirm_send_customer_wa.dart';
 import '../../widgets/editorial_screen_title.dart';
 import 'order_form_screen.dart';
 
@@ -302,10 +303,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       final phone = customer.phones.isNotEmpty ? customer.phones.first : '';
       final lang = Localizations.localeOf(context).languageCode;
       if (phone.trim().isNotEmpty) {
-        await _openWhatsAppToPhone(
-          phone,
-          _waCustomerOrderCanceled(lang, fullOrder),
-        );
+        if (mounted && await confirmSendCustomerWhatsApp(context)) {
+          await _openWhatsAppToPhone(
+            phone,
+            _waCustomerOrderCanceled(lang, fullOrder),
+          );
+        }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -369,7 +372,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final ordersCustomerFilter = ref.watch(ordersCustomerFilterProvider);
-    final customersAsync = ref.watch(customersProvider);
     final ordersAsync = ordersCustomerFilter != null
         ? ref.watch(customerOrdersProvider(ordersCustomerFilter.id))
         : ref.watch(ordersProvider);
@@ -378,8 +380,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       if (previous?.id == next?.id || !mounted) return;
       setState(() => _currentPage = 1);
     });
-
-    final customers = customersAsync.value ?? [];
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceContainerLowest,
@@ -413,6 +413,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             child: ordersAsync.when(
               data: (orders) {
                 var filtered = orders.where((o) {
+                  final isClosedStatusSelected = _statusFilter == 'Canceled' ||
+                      _statusFilter == 'Delivered';
+                  if (!isClosedStatusSelected &&
+                      (o.status == OrderStatus.canceled ||
+                          o.status == OrderStatus.delivered)) {
+                    return false;
+                  }
                   if (_statusFilter != 'All' &&
                       o.status.dbValue != _statusFilter) {
                     return false;
@@ -674,14 +681,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                               runSpacing: 10,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                SizedBox(
-                                  width: 280,
-                                  child: _buildCardNameFilterDropdown(
-                                    customers,
-                                    ordersCustomerFilter,
-                                    l10n,
-                                  ),
-                                ),
                                 SizedBox(
                                   width: 220,
                                   child: _buildCreatedByDropdown(
@@ -1146,92 +1145,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCardNameFilterDropdown(
-    List<Customer> customers,
-    Customer? selected,
-    AppLocalizations? l10n,
-  ) {
-    final sorted = [...customers]..sort(
-        (a, b) => a.cardName.toLowerCase().compareTo(b.cardName.toLowerCase()),
-      );
-
-    return DropdownMenu<String>(
-      key: ValueKey('card_filter_${selected?.id ?? 'all'}'),
-      initialSelection: selected?.id ?? '',
-      width: 280,
-      enableFilter: true,
-      requestFocusOnTap: true,
-      leadingIcon: dropdownLeadingSlot(
-        Icon(
-          selected == null ? Icons.badge_outlined : Icons.badge_rounded,
-          size: 18,
-          color: AppTheme.secondary,
-        ),
-      ),
-      label: Text(
-        l10n?.tr('cardName') ?? 'שם כרטיס',
-        style: GoogleFonts.assistant(
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
-        ),
-      ),
-      menuStyle: appDropdownMenuStyle(),
-      inputDecorationTheme:
-          appDropdownInputDecorationTheme().copyWith(fillColor: Colors.white),
-      textStyle: GoogleFonts.assistant(
-        color: AppTheme.onSurface,
-        fontWeight: FontWeight.w600,
-      ),
-      trailingIcon: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        color: AppTheme.secondary,
-      ),
-      selectedTrailingIcon: Icon(
-        Icons.keyboard_arrow_up_rounded,
-        color: AppTheme.secondary,
-      ),
-      onSelected: (id) {
-        if (id == null) return;
-        if (id.isEmpty) {
-          ref.read(ordersCustomerFilterProvider.notifier).setFilter(null);
-        } else {
-          final match = sorted.where((c) => c.id == id);
-          if (match.isEmpty) return;
-          ref
-              .read(ordersCustomerFilterProvider.notifier)
-              .setFilter(match.first);
-        }
-        setState(() => _currentPage = 1);
-      },
-      dropdownMenuEntries: [
-        DropdownMenuEntry<String>(
-          value: '',
-          label: l10n?.tr('all') ?? 'All',
-          leadingIcon: dropdownLeadingSlot(
-            Icon(
-              Icons.groups_outlined,
-              size: 16,
-              color: AppTheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        ...sorted.map(
-          (c) => DropdownMenuEntry<String>(
-            value: c.id,
-            label: '${c.cardName} — ${c.customerName}',
-            leadingIcon: dropdownLeadingSlot(
-              Icon(
-                Icons.badge_outlined,
-                size: 16,
-                color: AppTheme.secondary,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -2723,8 +2636,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         final lang = Localizations.localeOf(context).languageCode;
         final isFinalBatch = selected.length == notReady.length;
         if (isFinalBatch) {
-          await _openWhatsAppToPhone(
-              phone, _waCustomerReadyPickup(lang, order));
+          if (mounted && await confirmSendCustomerWhatsApp(context)) {
+            await _openWhatsAppToPhone(
+                phone, _waCustomerReadyPickup(lang, order));
+          }
           await ref.read(orderServiceProvider).updateStatus(
                 order.id,
                 OrderStatus.awaitingShipping.dbValue,
@@ -2737,10 +2652,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           final itemsBlock = selectedItems
               .map((it) => '${it.name}\n×${formatQty(it.quantity)}')
               .join('\n\n');
-          await _openWhatsAppToPhone(
-            phone,
-            _waCustomerPartialReady(lang, order, itemsBlock: itemsBlock),
-          );
+          if (mounted && await confirmSendCustomerWhatsApp(context)) {
+            await _openWhatsAppToPhone(
+              phone,
+              _waCustomerPartialReady(lang, order, itemsBlock: itemsBlock),
+            );
+          }
         }
       }
 
@@ -2821,8 +2738,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     }
 
     final langPickup = Localizations.localeOf(context).languageCode;
-    await _openWhatsAppToPhone(
-        phone, _waCustomerReadyPickup(langPickup, order));
+    if (mounted && await confirmSendCustomerWhatsApp(context)) {
+      await _openWhatsAppToPhone(
+          phone, _waCustomerReadyPickup(langPickup, order));
+    }
 
     if (!mounted) return;
     await _updateOrderStatus(order.id, OrderStatus.awaitingShipping.dbValue);
@@ -2917,10 +2836,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Future<void> _maybeSendGenericStatusUpdateToCustomer(
       String orderId, String newStatusDb) async {
     // Statuses with their own dedicated workflow message — skip generic.
+    // Delivered is fully silent (per shop request: no message at delivery).
     const skip = {
       'Awaiting Shipping',
       'Canceled',
       'Active',
+      'Delivered',
     };
     if (skip.contains(newStatusDb)) return;
 
@@ -2935,7 +2856,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final phone = customer.phones.first.trim();
     if (phone.isEmpty) return;
 
-    final lang = mounted ? Localizations.localeOf(context).languageCode : 'he';
+    if (!mounted) return;
+    final lang = Localizations.localeOf(context).languageCode;
     final status = OrderStatusExtension.fromString(newStatusDb);
     final message = _buildGenericStatusMessage(
       languageCode: lang,
@@ -2946,6 +2868,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       status: status,
     );
 
+    if (!await confirmSendCustomerWhatsApp(context)) return;
     await WhatsAppService.sendMessage(phone, message);
   }
 
