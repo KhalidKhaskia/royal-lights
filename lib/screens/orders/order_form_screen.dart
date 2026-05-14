@@ -52,6 +52,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
+  bool _isInitialLoad = false;
   bool _isEdit = false;
   Order? _existingOrder;
 
@@ -181,6 +182,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   void _markDirty() {
     if (_isReadOnly) return;
+    if (_isInitialLoad) return;
     if (_hasUnsavedChanges) return;
     setState(() => _hasUnsavedChanges = true);
   }
@@ -245,6 +247,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     try {
       final order =
           await ref.read(orderServiceProvider).getById(widget.orderId!);
+      _isInitialLoad = true;
       setState(() {
         _existingOrder = order;
         _hasUnsavedChanges = false;
@@ -292,6 +295,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _isLoading = false;
         _lastNotifiedCustomerItemsSignature =
             _signatureForOrderItems(order.items);
+        _isInitialLoad = false;
       });
       _bottomDrawerController.reset();
       if (widget.openBottomDrawerInitially && mounted) {
@@ -626,6 +630,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     if (picked.availableStock > 0) {
       row.existingInStore = true;
     }
+  }
+
+  void _resetRowInventoryLink(_ItemRow row) {
+    row.inventoryItemId = null;
+    row.supplierId = null;
+    row.existingInStore = false;
+    row.warrantyYears = 0;
+    row.imageUrl = null;
   }
 
   /// True when this row was entered manually and is NOT linked to an
@@ -1664,45 +1676,13 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                l10n?.tr('orderItems') ?? 'Order Items',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            if (!_isReadOnly && !_isLoading)
-                              FilledButton.icon(
-                                onPressed: () {
-                                  _markDirty();
-                                  setState(() => _items.add(_ItemRow()));
-                                },
-                                icon: const Icon(Icons.add_rounded, size: 20),
-                                label: Text(
-                                  l10n?.tr('addItem') ?? 'Add item',
-                                  style: GoogleFonts.assistant(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.secondary,
-                                  foregroundColor: AppTheme.onPrimary,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 10,
-                                  ),
-                                  shape: const StadiumBorder(),
-                                  elevation: 0,
-                                ),
-                              ),
-                          ],
+                        child: Text(
+                          l10n?.tr('orderItems') ?? 'Order Items',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.onSurface,
+                          ),
                         ),
                       ),
                       Container(
@@ -1768,7 +1748,38 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      if (!_isReadOnly && !_isLoading) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              _markDirty();
+                              setState(() => _items.add(_ItemRow()));
+                            },
+                            icon: const Icon(Icons.add_rounded, size: 20),
+                            label: Text(
+                              l10n?.tr('addItem') ?? 'Add item',
+                              style: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.secondary,
+                              foregroundColor: AppTheme.onPrimary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: const StadiumBorder(),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ] else
+                        const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -3005,6 +3016,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           enabled: !readOnly,
                           onChanged: (_) {
                             _markDirty();
+                            if (item.inventoryItemId != null) {
+                              setState(() {
+                                _resetRowInventoryLink(item);
+                                item.nameCtrl.clear();
+                              });
+                            }
                             _showInventorySuggestions(
                               context: context,
                               anchorKey: item.itemNumberKey,
@@ -3066,6 +3083,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           enabled: !readOnly,
                           onChanged: (_) {
                             _markDirty();
+                            if (item.inventoryItemId != null) {
+                              setState(() {
+                                _resetRowInventoryLink(item);
+                                item.itemNumberCtrl.clear();
+                              });
+                            }
                             _showInventorySuggestions(
                               context: context,
                               anchorKey: item.nameKey,
