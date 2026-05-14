@@ -2315,8 +2315,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              SizedBox(
-                width: fillVertical ? 110 : 130,
+              Expanded(
                 child: TextField(
                   controller: _discountPctController,
                   focusNode: _discountPctFocusNode,
@@ -2374,37 +2373,63 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   ),
                 ),
               ),
-            ],
-          ),
-          SizedBox(height: fillVertical ? 6 : 10),
-          Row(
-            children: [
-              Expanded(
-                child: SegmentedButton<String>(
-                  segments: <ButtonSegment<String>>[
-                    ButtonSegment<String>(
-                      value: 'percentage',
-                      label: Text('%'),
-                      icon: const Icon(Icons.percent_rounded, size: 18),
+              const SizedBox(width: 8),
+              SegmentedButton<String>(
+                segments: <ButtonSegment<String>>[
+                  ButtonSegment<String>(
+                    value: 'percentage',
+                    label: Text(
+                      '%',
+                      style: GoogleFonts.assistant(
+                        fontWeight: FontWeight.w700,
+                        fontSize: fillVertical ? 11 : 12,
+                      ),
                     ),
-                    ButtonSegment<String>(
-                      value: 'fixed_amount',
-                      label: Text('₪'),
-                      icon: const Icon(Icons.attach_money_rounded, size: 18),
+                    icon: const Icon(Icons.percent_rounded, size: 16),
+                  ),
+                  ButtonSegment<String>(
+                    value: 'fixed_amount',
+                    label: Text(
+                      '₪',
+                      style: GoogleFonts.assistant(
+                        fontWeight: FontWeight.w700,
+                        fontSize: fillVertical ? 11 : 12,
+                      ),
                     ),
-                  ],
-                  selected: <String>{_discountType},
-                  onSelectionChanged: (Set<String> newSelection) {
-                    setState(() {
-                      _discountType = newSelection.first;
-                      _markDirty();
-                    });
-                  },
+                    icon: const Icon(Icons.attach_money_rounded, size: 16),
+                  ),
+                ],
+                selected: <String>{_discountType},
+                onSelectionChanged: (Set<String> newSelection) {
+                  setState(() {
+                    _discountType = newSelection.first;
+                    _markDirty();
+                  });
+                },
+                style: ButtonStyle(
+                  side: WidgetStateProperty.all(
+                    BorderSide(
+                      color: AppTheme.secondary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return AppTheme.secondary;
+                    }
+                    return AppTheme.onPrimary.withValues(alpha: 0.05);
+                  }),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return AppTheme.onSecondary;
+                    }
+                    return AppTheme.onPrimary;
+                  }),
                 ),
               ),
             ],
           ),
-          SizedBox(height: fillVertical ? 6 : 14),
+          SizedBox(height: fillVertical ? 8 : 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2419,8 +2444,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ar: 'الإجمالي قبل الضريبة',
                   ),
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: fillVertical ? 11 : 13,
+                    fontWeight: FontWeight.w500,
                     color: subtle,
                   ),
                 ),
@@ -2428,15 +2453,15 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               Text(
                 '₪${sub.toStringAsFixed(2)}',
                 style: GoogleFonts.assistant(
-                  fontSize: fillVertical ? 12 : 14,
-                  fontWeight: FontWeight.w700,
+                  fontSize: fillVertical ? 11 : 13,
+                  fontWeight: FontWeight.w600,
                   color: AppTheme.onPrimary,
                 ),
               ),
             ],
           ),
           if (_vatEnabled) ...[
-            SizedBox(height: fillVertical ? 3 : 10),
+            SizedBox(height: fillVertical ? 6 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2451,8 +2476,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       ar: 'ضريبة القيمة المضافة (18٪)',
                     ),
                     style: GoogleFonts.assistant(
-                      fontSize: fillVertical ? 12 : 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: fillVertical ? 11 : 13,
+                      fontWeight: FontWeight.w500,
                       color: subtle,
                     ),
                   ),
@@ -2460,8 +2485,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 Text(
                   '₪${vat.toStringAsFixed(2)}',
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: fillVertical ? 11 : 13,
+                    fontWeight: FontWeight.w600,
                     color: AppTheme.onPrimary,
                   ),
                 ),
@@ -2469,7 +2494,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             ),
           ],
           if (discount > 0) ...[
-            SizedBox(height: fillVertical ? 3 : 10),
+            SizedBox(height: fillVertical ? 6 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2493,83 +2518,104 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                             ar: 'خصم',
                           ),
                     style: GoogleFonts.assistant(
-                      fontSize: fillVertical ? 12 : 14,
-                      fontWeight: FontWeight.w600,
-                      color: subtle,
+                      fontSize: fillVertical ? 11 : 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.secondary,
                     ),
                   ),
                 ),
                 Text(
                   '-₪${discount.toStringAsFixed(2)}',
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
+                    fontSize: fillVertical ? 11 : 13,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.onPrimary,
+                    color: AppTheme.secondary,
                   ),
                 ),
               ],
             ),
           ],
-          SizedBox(height: fillVertical ? 4 : 20),
+          SizedBox(height: fillVertical ? 8 : 12),
           Divider(
             height: 1,
             color: AppTheme.onPrimary.withValues(alpha: 0.2),
           ),
-          SizedBox(height: fillVertical ? 4 : 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          SizedBox(height: fillVertical ? 10 : 14),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: fillVertical ? 10 : 12,
+              vertical: fillVertical ? 10 : 12,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.secondary.withValues(alpha: 0.08),
+              border: Border(
+                left: BorderSide(
+                  color: AppTheme.secondary,
+                  width: 3,
+                ),
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _orderTableColumnLabel(
+                          context,
+                          l10n,
+                          'totalToPay',
+                          en: 'Total to pay',
+                          he: 'סה"כ לתשלום',
+                          ar: 'الإجمالي للدفع',
+                        ),
+                        style: GoogleFonts.assistant(
+                          fontSize: fillVertical ? 14 : 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.onPrimary,
+                          height: 1.1,
+                        ),
+                      ),
+                      SizedBox(height: fillVertical ? 2 : 4),
+                      Text(
+                        _orderTableColumnLabel(
+                          context,
+                          l10n,
+                          'includesEverything',
+                          en: 'Includes everything',
+                          he: 'כולל הכל',
+                          ar: 'شامل كل شيء',
+                        ),
+                        style: GoogleFonts.assistant(
+                          fontSize: fillVertical ? 10 : 11,
+                          fontWeight: FontWeight.w400,
+                          color: subtle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      _orderTableColumnLabel(
-                        context,
-                        l10n,
-                        'totalToPay',
-                        en: 'Total to pay',
-                        he: 'סה"כ לתשלום',
-                        ar: 'الإجمالي للدفع',
-                      ),
+                      '₪${grand.toStringAsFixed(2)}',
                       style: GoogleFonts.assistant(
-                        fontSize: fillVertical ? 15 : 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.onPrimary,
-                        height: 1.1,
-                      ),
-                    ),
-                    SizedBox(height: fillVertical ? 0 : 4),
-                    Text(
-                      _orderTableColumnLabel(
-                        context,
-                        l10n,
-                        'includesEverything',
-                        en: 'Includes everything',
-                        he: 'כולל הכל',
-                        ar: 'شامل كل شيء',
-                      ),
-                      style: GoogleFonts.assistant(
-                        fontSize: fillVertical ? 10 : 12,
-                        fontWeight: FontWeight.w500,
-                        color: subtle,
+                        fontSize: fillVertical ? 20 : 32,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.secondary,
+                        letterSpacing: -0.8,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '₪${grand.toStringAsFixed(2)}',
-                style: GoogleFonts.assistant(
-                  fontSize: fillVertical ? 19 : 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.onPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           SizedBox(height: fillVertical ? 6 : 22),
           SizedBox(
