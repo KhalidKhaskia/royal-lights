@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
+import 'package:uuid/uuid.dart';
 import '../../config/app_theme.dart';
 import '../../services/whatsapp_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -47,12 +48,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   final _assemblyPriceFocusNode = FocusNode();
   final _notesController = TextEditingController();
   bool _vatEnabled = true;
+  String _discountType = 'percentage'; // 'percentage' or 'fixed_amount'
   final _discountPctController = TextEditingController();
   final _discountPctFocusNode = FocusNode();
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
   bool _isInitialLoad = false;
+  bool _loadFailed = false;
   bool _isEdit = false;
   Order? _existingOrder;
 
@@ -245,6 +248,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   Future<void> _loadOrder() async {
     setState(() => _isLoading = true);
     try {
+      _loadFailed = false;
       final order =
           await ref.read(orderServiceProvider).getById(widget.orderId!);
       _isInitialLoad = true;
@@ -256,6 +260,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _assemblyPriceController.text =
             order.assemblyPrice > 0 ? order.assemblyPrice.toString() : '';
         _vatEnabled = order.vatEnabled;
+        _discountType = order.discountType;
         _discountPctController.text = order.discountPercentage > 0
             ? formatQty(order.discountPercentage)
             : '';
@@ -304,7 +309,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         });
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadFailed = true;
+        });
+        final lang = Localizations.localeOf(context).languageCode;
+        final message = switch (lang) {
+          'he' => 'שגיאה בטעינת ההזמנה. חזור ונסה שוב.',
+          'ar' => 'فشل تحميل الطلب. ارجع وحاول مرة أخرى.',
+          _ => 'Failed to load order. Please go back and try again.',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message,
+              style: GoogleFonts.assistant(),
+            ),
+            backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 
@@ -352,6 +378,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   /// Discount percentage (0–100), parsed from controller and clamped.
   double get _discountPercentage {
+    if (_discountType == 'fixed_amount') return 0;
     final t = _discountPctController.text.trim().replaceAll(',', '.');
     final v = double.tryParse(t) ?? 0;
     if (v.isNaN || v <= 0) return 0;
@@ -359,7 +386,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   }
 
   /// Discount amount in shekels (applied to the VAT-inclusive total).
-  double get _discountAmount => _totalWithVat * (_discountPercentage / 100);
+  double get _discountAmount {
+    if (_discountType == 'percentage') {
+      return _totalWithVat * (_discountPercentage / 100);
+    } else {
+      // Fixed amount
+      final t = _discountPctController.text.trim().replaceAll(',', '.');
+      final amt = double.tryParse(t) ?? 0;
+      return amt > 0 ? amt : 0;
+    }
+  }
 
   /// Final amount stored in DB as `total_price`.
   double get _grandTotalWithVat => _totalWithVat - _discountAmount;
@@ -2305,19 +2341,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ),
                     filled: true,
                     fillColor: AppTheme.onPrimary.withValues(alpha: 0.10),
-                    hintText: _orderTableColumnLabel(
-                      context,
-                      l10n,
-                      'discountPercent',
-                      en: 'Discount %',
-                      he: 'הנחה %',
-                      ar: 'خصم %',
-                    ),
+                    hintText: _discountType == 'percentage'
+                        ? _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountPercent',
+                            en: 'Discount %',
+                            he: 'הנחה %',
+                            ar: 'خصم %',
+                          )
+                        : _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountAmount',
+                            en: 'Discount ₪',
+                            he: 'הנחה ₪',
+                            ar: 'خصم ₪',
+                          ),
                     hintStyle: GoogleFonts.assistant(
                       fontSize: fillVertical ? 11 : 12,
                       color: subtle,
                     ),
-                    suffixText: '%',
+                    suffixText: _discountType == 'percentage' ? '%' : '₪',
                     suffixStyle: GoogleFonts.assistant(
                       color: subtle,
                       fontWeight: FontWeight.w700,
@@ -2327,6 +2372,34 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       borderSide: BorderSide.none,
                     ),
                   ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: fillVertical ? 6 : 10),
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: <ButtonSegment<String>>[
+                    ButtonSegment<String>(
+                      value: 'percentage',
+                      label: Text('%'),
+                      icon: const Icon(Icons.percent_rounded, size: 18),
+                    ),
+                    ButtonSegment<String>(
+                      value: 'fixed_amount',
+                      label: Text('₪'),
+                      icon: const Icon(Icons.attach_money_rounded, size: 18),
+                    ),
+                  ],
+                  selected: <String>{_discountType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _discountType = newSelection.first;
+                      _markDirty();
+                    });
+                  },
                 ),
               ),
             ],
@@ -2395,21 +2468,30 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               ],
             ),
           ],
-          if (discountPct > 0) ...[
+          if (discount > 0) ...[
             SizedBox(height: fillVertical ? 3 : 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Flexible(
                   child: Text(
-                    '${_orderTableColumnLabel(
-                      context,
-                      l10n,
-                      'discountLabel',
-                      en: 'Discount',
-                      he: 'הנחה',
-                      ar: 'خصم',
-                    )} (-${formatQty(discountPct)}%)',
+                    _discountType == 'percentage'
+                        ? '${_orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountLabel',
+                            en: 'Discount',
+                            he: 'הנחה',
+                            ar: 'خصم',
+                          )} (-${formatQty(discountPct)}%)'
+                        : _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountLabel',
+                            en: 'Discount',
+                            he: 'הנחה',
+                            ar: 'خصم',
+                          ),
                     style: GoogleFonts.assistant(
                       fontSize: fillVertical ? 12 : 14,
                       fontWeight: FontWeight.w600,
@@ -3613,6 +3695,25 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       return false;
     }
 
+    if (_loadFailed) {
+      final lang = Localizations.localeOf(context).languageCode;
+      final message = switch (lang) {
+        'he' => 'שגיאה בטעינת ההזמנה. חזור ונסה שוב.',
+        'ar' => 'فشل تحميل الطلب. ارجع وحاول مرة أخرى.',
+        _ => 'Failed to load order. Please go back and try again.',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: GoogleFonts.assistant(),
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return false;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -3620,8 +3721,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       final username = ref.read(currentUsernameProvider);
       final orderItems = _items.map((item) {
         final roomTrim = item.roomCtrl.text.trim();
+        // For new items, generate a UUID on the client side
+        final itemId = (item.orderItemId != null && item.orderItemId!.trim().isNotEmpty)
+            ? item.orderItemId
+            : const Uuid().v4();
         return OrderItem(
-          id: item.orderItemId,
+          id: itemId,
           itemNumber: item.itemNumberCtrl.text.trim(),
           name: item.nameCtrl.text.trim(),
           imageUrl: item.imageUrl,
@@ -3664,7 +3769,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             'assembly_price': _assemblyRequired ? _assemblyInstallPrice : 0,
             'total_price': _grandTotalWithVat,
             'vat_enabled': _vatEnabled,
-            'discount_percentage': _discountPercentage,
+            'discount_type': _discountType,
+            'discount_percentage': _discountType == 'percentage' ? _discountPercentage : 0,
             'notes': _notesController.text.trim(),
             'updated_by': username,
           },

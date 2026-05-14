@@ -77,6 +77,7 @@
   "vatRemove": "إلغاء الضريبة",
   "discountLabel": "خصم",
   "discountPercent": "خصم %",
+  "discountAmount": "خصم ₪",
   "removeImage": "إزالة الصورة",
   "view": "عرض",
   "totalToPay": "الإجمالي للدفع",
