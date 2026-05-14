@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
+import 'package:uuid/uuid.dart';
 import '../../config/app_theme.dart';
 import '../../services/whatsapp_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -47,11 +48,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   final _assemblyPriceFocusNode = FocusNode();
   final _notesController = TextEditingController();
   bool _vatEnabled = true;
+  String _discountType = 'percentage'; // 'percentage' or 'fixed_amount'
   final _discountPctController = TextEditingController();
   final _discountPctFocusNode = FocusNode();
   List<_ItemRow> _items = [];
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
+  bool _isInitialLoad = false;
+  bool _loadFailed = false;
   bool _isEdit = false;
   Order? _existingOrder;
 
@@ -181,6 +185,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   void _markDirty() {
     if (_isReadOnly) return;
+    if (_isInitialLoad) return;
     if (_hasUnsavedChanges) return;
     setState(() => _hasUnsavedChanges = true);
   }
@@ -243,8 +248,10 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   Future<void> _loadOrder() async {
     setState(() => _isLoading = true);
     try {
+      _loadFailed = false;
       final order =
           await ref.read(orderServiceProvider).getById(widget.orderId!);
+      _isInitialLoad = true;
       setState(() {
         _existingOrder = order;
         _hasUnsavedChanges = false;
@@ -253,6 +260,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _assemblyPriceController.text =
             order.assemblyPrice > 0 ? order.assemblyPrice.toString() : '';
         _vatEnabled = order.vatEnabled;
+        _discountType = order.discountType;
         _discountPctController.text = order.discountPercentage > 0
             ? formatQty(order.discountPercentage)
             : '';
@@ -292,6 +300,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         _isLoading = false;
         _lastNotifiedCustomerItemsSignature =
             _signatureForOrderItems(order.items);
+        _isInitialLoad = false;
       });
       _bottomDrawerController.reset();
       if (widget.openBottomDrawerInitially && mounted) {
@@ -300,7 +309,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         });
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadFailed = true;
+        });
+        final lang = Localizations.localeOf(context).languageCode;
+        final message = switch (lang) {
+          'he' => 'שגיאה בטעינת ההזמנה. חזור ונסה שוב.',
+          'ar' => 'فشل تحميل الطلب. ارجع وحاول مرة أخرى.',
+          _ => 'Failed to load order. Please go back and try again.',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message,
+              style: GoogleFonts.assistant(),
+            ),
+            backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 
@@ -348,6 +378,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
 
   /// Discount percentage (0–100), parsed from controller and clamped.
   double get _discountPercentage {
+    if (_discountType == 'fixed_amount') return 0;
     final t = _discountPctController.text.trim().replaceAll(',', '.');
     final v = double.tryParse(t) ?? 0;
     if (v.isNaN || v <= 0) return 0;
@@ -355,7 +386,16 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
   }
 
   /// Discount amount in shekels (applied to the VAT-inclusive total).
-  double get _discountAmount => _totalWithVat * (_discountPercentage / 100);
+  double get _discountAmount {
+    if (_discountType == 'percentage') {
+      return _totalWithVat * (_discountPercentage / 100);
+    } else {
+      // Fixed amount
+      final t = _discountPctController.text.trim().replaceAll(',', '.');
+      final amt = double.tryParse(t) ?? 0;
+      return amt > 0 ? amt : 0;
+    }
+  }
 
   /// Final amount stored in DB as `total_price`.
   double get _grandTotalWithVat => _totalWithVat - _discountAmount;
@@ -626,6 +666,14 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
     if (picked.availableStock > 0) {
       row.existingInStore = true;
     }
+  }
+
+  void _resetRowInventoryLink(_ItemRow row) {
+    row.inventoryItemId = null;
+    row.supplierId = null;
+    row.existingInStore = false;
+    row.warrantyYears = 0;
+    row.imageUrl = null;
   }
 
   /// True when this row was entered manually and is NOT linked to an
@@ -1664,45 +1712,13 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                l10n?.tr('orderItems') ?? 'Order Items',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            if (!_isReadOnly && !_isLoading)
-                              FilledButton.icon(
-                                onPressed: () {
-                                  _markDirty();
-                                  setState(() => _items.add(_ItemRow()));
-                                },
-                                icon: const Icon(Icons.add_rounded, size: 20),
-                                label: Text(
-                                  l10n?.tr('addItem') ?? 'Add item',
-                                  style: GoogleFonts.assistant(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.secondary,
-                                  foregroundColor: AppTheme.onPrimary,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 10,
-                                  ),
-                                  shape: const StadiumBorder(),
-                                  elevation: 0,
-                                ),
-                              ),
-                          ],
+                        child: Text(
+                          l10n?.tr('orderItems') ?? 'Order Items',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.onSurface,
+                          ),
                         ),
                       ),
                       Container(
@@ -1768,7 +1784,38 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      if (!_isReadOnly && !_isLoading) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              _markDirty();
+                              setState(() => _items.add(_ItemRow()));
+                            },
+                            icon: const Icon(Icons.add_rounded, size: 20),
+                            label: Text(
+                              l10n?.tr('addItem') ?? 'Add item',
+                              style: GoogleFonts.assistant(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.secondary,
+                              foregroundColor: AppTheme.onPrimary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: const StadiumBorder(),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ] else
+                        const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -2268,8 +2315,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              SizedBox(
-                width: fillVertical ? 110 : 130,
+              Expanded(
                 child: TextField(
                   controller: _discountPctController,
                   focusNode: _discountPctFocusNode,
@@ -2294,19 +2340,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ),
                     filled: true,
                     fillColor: AppTheme.onPrimary.withValues(alpha: 0.10),
-                    hintText: _orderTableColumnLabel(
-                      context,
-                      l10n,
-                      'discountPercent',
-                      en: 'Discount %',
-                      he: 'הנחה %',
-                      ar: 'خصم %',
-                    ),
+                    hintText: _discountType == 'percentage'
+                        ? _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountPercent',
+                            en: 'Discount %',
+                            he: 'הנחה %',
+                            ar: 'خصم %',
+                          )
+                        : _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountAmount',
+                            en: 'Discount ₪',
+                            he: 'הנחה ₪',
+                            ar: 'خصم ₪',
+                          ),
                     hintStyle: GoogleFonts.assistant(
                       fontSize: fillVertical ? 11 : 12,
                       color: subtle,
                     ),
-                    suffixText: '%',
+                    suffixText: _discountType == 'percentage' ? '%' : '₪',
                     suffixStyle: GoogleFonts.assistant(
                       color: subtle,
                       fontWeight: FontWeight.w700,
@@ -2318,9 +2373,63 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              SegmentedButton<String>(
+                segments: <ButtonSegment<String>>[
+                  ButtonSegment<String>(
+                    value: 'percentage',
+                    label: Text(
+                      '%',
+                      style: GoogleFonts.assistant(
+                        fontWeight: FontWeight.w700,
+                        fontSize: fillVertical ? 11 : 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.percent_rounded, size: 16),
+                  ),
+                  ButtonSegment<String>(
+                    value: 'fixed_amount',
+                    label: Text(
+                      '₪',
+                      style: GoogleFonts.assistant(
+                        fontWeight: FontWeight.w700,
+                        fontSize: fillVertical ? 11 : 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.attach_money_rounded, size: 16),
+                  ),
+                ],
+                selected: <String>{_discountType},
+                onSelectionChanged: (Set<String> newSelection) {
+                  setState(() {
+                    _discountType = newSelection.first;
+                    _markDirty();
+                  });
+                },
+                style: ButtonStyle(
+                  side: WidgetStateProperty.all(
+                    BorderSide(
+                      color: AppTheme.secondary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return AppTheme.secondary;
+                    }
+                    return AppTheme.onPrimary.withValues(alpha: 0.05);
+                  }),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return AppTheme.onSecondary;
+                    }
+                    return AppTheme.onPrimary;
+                  }),
+                ),
+              ),
             ],
           ),
-          SizedBox(height: fillVertical ? 6 : 14),
+          SizedBox(height: fillVertical ? 8 : 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2335,8 +2444,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                     ar: 'الإجمالي قبل الضريبة',
                   ),
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: fillVertical ? 11 : 13,
+                    fontWeight: FontWeight.w500,
                     color: subtle,
                   ),
                 ),
@@ -2344,15 +2453,15 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
               Text(
                 '₪${sub.toStringAsFixed(2)}',
                 style: GoogleFonts.assistant(
-                  fontSize: fillVertical ? 12 : 14,
-                  fontWeight: FontWeight.w700,
+                  fontSize: fillVertical ? 11 : 13,
+                  fontWeight: FontWeight.w600,
                   color: AppTheme.onPrimary,
                 ),
               ),
             ],
           ),
           if (_vatEnabled) ...[
-            SizedBox(height: fillVertical ? 3 : 10),
+            SizedBox(height: fillVertical ? 6 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -2367,8 +2476,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                       ar: 'ضريبة القيمة المضافة (18٪)',
                     ),
                     style: GoogleFonts.assistant(
-                      fontSize: fillVertical ? 12 : 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: fillVertical ? 11 : 13,
+                      fontWeight: FontWeight.w500,
                       color: subtle,
                     ),
                   ),
@@ -2376,107 +2485,137 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                 Text(
                   '₪${vat.toStringAsFixed(2)}',
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: fillVertical ? 11 : 13,
+                    fontWeight: FontWeight.w600,
                     color: AppTheme.onPrimary,
                   ),
                 ),
               ],
             ),
           ],
-          if (discountPct > 0) ...[
-            SizedBox(height: fillVertical ? 3 : 10),
+          if (discount > 0) ...[
+            SizedBox(height: fillVertical ? 6 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Flexible(
                   child: Text(
-                    '${_orderTableColumnLabel(
-                      context,
-                      l10n,
-                      'discountLabel',
-                      en: 'Discount',
-                      he: 'הנחה',
-                      ar: 'خصم',
-                    )} (-${formatQty(discountPct)}%)',
+                    _discountType == 'percentage'
+                        ? '${_orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountLabel',
+                            en: 'Discount',
+                            he: 'הנחה',
+                            ar: 'خصم',
+                          )} (-${formatQty(discountPct)}%)'
+                        : _orderTableColumnLabel(
+                            context,
+                            l10n,
+                            'discountLabel',
+                            en: 'Discount',
+                            he: 'הנחה',
+                            ar: 'خصم',
+                          ),
                     style: GoogleFonts.assistant(
-                      fontSize: fillVertical ? 12 : 14,
-                      fontWeight: FontWeight.w600,
-                      color: subtle,
+                      fontSize: fillVertical ? 11 : 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.secondary,
                     ),
                   ),
                 ),
                 Text(
                   '-₪${discount.toStringAsFixed(2)}',
                   style: GoogleFonts.assistant(
-                    fontSize: fillVertical ? 12 : 14,
+                    fontSize: fillVertical ? 11 : 13,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.onPrimary,
+                    color: AppTheme.secondary,
                   ),
                 ),
               ],
             ),
           ],
-          SizedBox(height: fillVertical ? 4 : 20),
+          SizedBox(height: fillVertical ? 8 : 12),
           Divider(
             height: 1,
             color: AppTheme.onPrimary.withValues(alpha: 0.2),
           ),
-          SizedBox(height: fillVertical ? 4 : 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          SizedBox(height: fillVertical ? 10 : 14),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: fillVertical ? 10 : 12,
+              vertical: fillVertical ? 10 : 12,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.secondary.withValues(alpha: 0.08),
+              border: Border(
+                left: BorderSide(
+                  color: AppTheme.secondary,
+                  width: 3,
+                ),
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _orderTableColumnLabel(
+                          context,
+                          l10n,
+                          'totalToPay',
+                          en: 'Total to pay',
+                          he: 'סה"כ לתשלום',
+                          ar: 'الإجمالي للدفع',
+                        ),
+                        style: GoogleFonts.assistant(
+                          fontSize: fillVertical ? 14 : 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.onPrimary,
+                          height: 1.1,
+                        ),
+                      ),
+                      SizedBox(height: fillVertical ? 2 : 4),
+                      Text(
+                        _orderTableColumnLabel(
+                          context,
+                          l10n,
+                          'includesEverything',
+                          en: 'Includes everything',
+                          he: 'כולל הכל',
+                          ar: 'شامل كل شيء',
+                        ),
+                        style: GoogleFonts.assistant(
+                          fontSize: fillVertical ? 10 : 11,
+                          fontWeight: FontWeight.w400,
+                          color: subtle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      _orderTableColumnLabel(
-                        context,
-                        l10n,
-                        'totalToPay',
-                        en: 'Total to pay',
-                        he: 'סה"כ לתשלום',
-                        ar: 'الإجمالي للدفع',
-                      ),
+                      '₪${grand.toStringAsFixed(2)}',
                       style: GoogleFonts.assistant(
-                        fontSize: fillVertical ? 15 : 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.onPrimary,
-                        height: 1.1,
-                      ),
-                    ),
-                    SizedBox(height: fillVertical ? 0 : 4),
-                    Text(
-                      _orderTableColumnLabel(
-                        context,
-                        l10n,
-                        'includesEverything',
-                        en: 'Includes everything',
-                        he: 'כולל הכל',
-                        ar: 'شامل كل شيء',
-                      ),
-                      style: GoogleFonts.assistant(
-                        fontSize: fillVertical ? 10 : 12,
-                        fontWeight: FontWeight.w500,
-                        color: subtle,
+                        fontSize: fillVertical ? 20 : 32,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.secondary,
+                        letterSpacing: -0.8,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '₪${grand.toStringAsFixed(2)}',
-                style: GoogleFonts.assistant(
-                  fontSize: fillVertical ? 19 : 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.onPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           SizedBox(height: fillVertical ? 6 : 22),
           SizedBox(
@@ -3005,6 +3144,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           enabled: !readOnly,
                           onChanged: (_) {
                             _markDirty();
+                            if (item.inventoryItemId != null) {
+                              setState(() {
+                                _resetRowInventoryLink(item);
+                                item.nameCtrl.clear();
+                              });
+                            }
                             _showInventorySuggestions(
                               context: context,
                               anchorKey: item.itemNumberKey,
@@ -3066,6 +3211,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
                           enabled: !readOnly,
                           onChanged: (_) {
                             _markDirty();
+                            if (item.inventoryItemId != null) {
+                              setState(() {
+                                _resetRowInventoryLink(item);
+                                item.itemNumberCtrl.clear();
+                              });
+                            }
                             _showInventorySuggestions(
                               context: context,
                               anchorKey: item.nameKey,
@@ -3590,6 +3741,25 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       return false;
     }
 
+    if (_loadFailed) {
+      final lang = Localizations.localeOf(context).languageCode;
+      final message = switch (lang) {
+        'he' => 'שגיאה בטעינת ההזמנה. חזור ונסה שוב.',
+        'ar' => 'فشل تحميل الطلب. ارجع وحاول مرة أخرى.',
+        _ => 'Failed to load order. Please go back and try again.',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: GoogleFonts.assistant(),
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return false;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -3597,8 +3767,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       final username = ref.read(currentUsernameProvider);
       final orderItems = _items.map((item) {
         final roomTrim = item.roomCtrl.text.trim();
+        // For new items, generate a UUID on the client side
+        final itemId = (item.orderItemId != null && item.orderItemId!.trim().isNotEmpty)
+            ? item.orderItemId
+            : const Uuid().v4();
         return OrderItem(
-          id: item.orderItemId,
+          id: itemId,
           itemNumber: item.itemNumberCtrl.text.trim(),
           name: item.nameCtrl.text.trim(),
           imageUrl: item.imageUrl,
@@ -3641,7 +3815,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
             'assembly_price': _assemblyRequired ? _assemblyInstallPrice : 0,
             'total_price': _grandTotalWithVat,
             'vat_enabled': _vatEnabled,
-            'discount_percentage': _discountPercentage,
+            'discount_type': _discountType,
+            'discount_percentage': _discountType == 'percentage' ? _discountPercentage : 0,
             'notes': _notesController.text.trim(),
             'updated_by': username,
           },

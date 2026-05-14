@@ -77,6 +77,7 @@
   "vatRemove": "Disable VAT",
   "discountLabel": "Discount",
   "discountPercent": "Discount %",
+  "discountAmount": "Discount ₪",
   "removeImage": "Remove image",
   "view": "View",
   "totalToPay": "Total to pay",

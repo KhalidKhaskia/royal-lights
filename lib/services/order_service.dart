@@ -190,20 +190,22 @@ class OrderService {
     List<OrderItem> items,
     String username,
   ) async {
+    // Safety guard: never delete all items when saving an empty list.
+    // An empty list means items failed to load, not that the user deleted them.
+    if (items.isEmpty) return;
+
     // Delete existing items
     await _client.from('order_items').delete().eq('order_id', orderId);
 
     // Insert new items
-    if (items.isNotEmpty) {
-      final itemsJson = items.map((item) {
-        final json = item.toJson();
-        json['order_id'] = orderId;
-        json['created_by'] = username;
-        json['updated_by'] = username;
-        return json;
-      }).toList();
-      await _client.from('order_items').insert(itemsJson);
-    }
+    final itemsJson = items.map((item) {
+      final json = item.toJson();
+      json['order_id'] = orderId;
+      json['created_by'] = username;
+      json['updated_by'] = username;
+      return json;
+    }).toList();
+    await _client.from('order_items').insert(itemsJson);
   }
 
   /// Uploads a manually-picked photo for an order item to the

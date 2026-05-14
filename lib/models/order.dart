@@ -97,6 +97,8 @@ class Order {
   final bool vatEnabled;
   /// Discount percentage (0–100) applied to the VAT-inclusive grand total.
   final double discountPercentage;
+  /// Discount type: 'percentage' or 'fixed_amount'. Default 'percentage'.
+  final String discountType;
   final String? notes;
   final String? createdBy;
   final String? updatedBy;
@@ -120,6 +122,7 @@ class Order {
     this.totalPrice = 0,
     this.vatEnabled = true,
     this.discountPercentage = 0,
+    this.discountType = 'percentage',
     this.notes,
     this.createdBy,
     this.updatedBy,
@@ -150,6 +153,7 @@ class Order {
       vatEnabled: json['vat_enabled'] as bool? ?? true,
       discountPercentage:
           (json['discount_percentage'] as num?)?.toDouble() ?? 0,
+      discountType: (json['discount_type'] as String?) ?? 'percentage',
       notes: json['notes'] as String?,
       createdBy: json['created_by'] as String?,
       updatedBy: json['updated_by'] as String?,
@@ -184,6 +188,7 @@ class Order {
       'total_price': totalPrice,
       'vat_enabled': vatEnabled,
       'discount_percentage': discountPercentage,
+      'discount_type': discountType,
       'notes': notes,
       'created_by': createdBy,
       'updated_by': updatedBy,
@@ -202,6 +207,7 @@ class Order {
     double? totalPrice,
     bool? vatEnabled,
     double? discountPercentage,
+    String? discountType,
     String? notes,
     String? createdBy,
     String? updatedBy,
@@ -221,6 +227,7 @@ class Order {
       totalPrice: totalPrice ?? this.totalPrice,
       vatEnabled: vatEnabled ?? this.vatEnabled,
       discountPercentage: discountPercentage ?? this.discountPercentage,
+      discountType: discountType ?? this.discountType,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
