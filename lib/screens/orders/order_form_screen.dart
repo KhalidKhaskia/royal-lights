@@ -3760,6 +3760,34 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
       return false;
     }
 
+    // Validate items: check if any row has both code and name empty
+    final emptyItemIndex = _items.indexWhere((item) {
+      final codeTrimmed = item.itemNumberCtrl.text.trim();
+      final nameTrimmed = item.nameCtrl.text.trim();
+      return codeTrimmed.isEmpty && nameTrimmed.isEmpty;
+    });
+
+    if (emptyItemIndex >= 0) {
+      final lang = Localizations.localeOf(context).languageCode;
+      final message = switch (lang) {
+        'he' => 'שורה ${emptyItemIndex + 1}: חובה להזין קוד או שם לפחות',
+        'ar' => 'الصف ${emptyItemIndex + 1}: يجب إدخال رمز أو اسم على الأقل',
+        _ => 'Row ${emptyItemIndex + 1}: Code or name is required',
+      };
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: GoogleFonts.assistant(),
+          ),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return false;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -3866,11 +3894,40 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen>
         );
       }
       _lastNotifiedCustomerItemsSignature = itemsSig;
+
+      if (mounted) {
+        final lang = Localizations.localeOf(context).languageCode;
+        final successMessage = switch (lang) {
+          'he' => 'ההזמנה נשמרה בהצלחה',
+          'ar' => 'تم حفظ الطلب بنجاح',
+          _ => 'Order saved successfully',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              successMessage,
+              style: GoogleFonts.assistant(),
+            ),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
       return true;
     } catch (e) {
       if (!mounted) return false;
+      final lang = Localizations.localeOf(context).languageCode;
+      final errorMessage = switch (lang) {
+        'he' => 'שגיאה בשמירה: $e',
+        'ar' => 'خطأ في الحفظ: $e',
+        _ => 'Error saving: $e',
+      };
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        SnackBar(
+          content: Text(errorMessage, style: GoogleFonts.assistant()),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 4),
+        ),
       );
       return false;
     } finally {
